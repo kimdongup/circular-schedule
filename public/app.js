@@ -639,36 +639,40 @@ async function downloadAsPNG() {
   image.src = url;
 }
 
-function loadScript(src, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = src;
-    script.async = true;
-    const timer = setTimeout(() => {
-      script.remove();
-      reject(new Error("script timeout"));
-    }, timeoutMs);
-    script.onload = () => {
-      clearTimeout(timer);
-      resolve();
-    };
-    script.onerror = () => {
-      clearTimeout(timer);
-      reject(new Error("script error"));
-    };
-    document.head.appendChild(script);
-  });
+const SUPABASE_ESM_CANDIDATES = [
+  "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm",
+  "https://esm.sh/@supabase/supabase-js@2"
+];
+
+async function ensureSupabaseLibrary() {
+  if (window.supabase && typeof window.supabase.createClient === "function") return true;
+  for (const src of SUPABASE_ESM_CANDIDATES) {
+    try {
+      const mod = await import(src);
+      if (mod && typeof mod.createClient === "function") {
+        window.supabase = mod;
+        return true;
+      }
+    } catch (err) {
+      console.warn("Supabase ESM load failed", src, err);
+    }
+  }
+  return false;
 }
 
 async function initSupabase() {
   try {
     const res = await fetch("/api/config");
     const { supabaseUrl, supabaseAnonKey } = await res.json();
-    if (!supabaseUrl || !supabaseAnonKey) return;
-    if (!window.supabase) {
-      await loadScript("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2", 8000);
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.warn("Supabase env missing: set SUPABASE_URL and SUPABASE_ANON_KEY on the server");
+      return;
     }
-    if (!window.supabase) return;
+    const loaded = await ensureSupabaseLibrary();
+    if (!loaded) {
+      console.warn("Supabase JS library failed to load");
+      return;
+    }
     supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
     const { data: { session } } = await supabase.auth.getSession();
     if (session) handleUserLogin(session.user);
