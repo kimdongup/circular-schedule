@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>원형 일주일 시간표 (9시 ~ 21시)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+
+<div class="container">
+  <header class="top-nav card">
+    <div class="auth-box" id="auth-box">
+      <span id="user-display">게스트 모드 (로컬 저장 중)</span>
+      <div class="btn-group">
+        <button type="button" id="btn-login-modal" class="btn btn-sm btn-secondary">로그인 / 가입</button>
+        <button type="button" id="btn-logout" class="btn btn-sm btn-outline" style="display:none;">로그아웃</button>
+      </div>
+    </div>
+    <div id="cloud-schedules-bar" style="display:none; margin-top:10px;">
+      <select id="cloud-schedule-select" class="form-control">
+        <option value="">-- 내 클라우드 시간표 불러오기 --</option>
+      </select>
+    </div>
+  </header>
+
+  <div class="card viewer-card">
+    <div class="header-row">
+      <input type="text" id="schedule-title" class="title-input" value="나의 일주일 시간표 (9시 ~ 21시)" placeholder="시간표 제목을 입력하세요" />
+    </div>
+
+    <div class="svg-wrapper">
+      <svg id="schedule-svg" viewBox="0 0 600 600" role="img" aria-label="원형 일주일 시간표"></svg>
+    </div>
+
+    <div id="detail-card" class="detail-card" style="display:none;">
+      <span id="detail-text">활동 정보</span>
+      <div class="detail-actions">
+        <button type="button" class="btn btn-sm btn-secondary" id="detail-edit-btn">수정</button>
+        <button type="button" class="btn btn-danger btn-sm" id="detail-delete-btn">삭제</button>
+      </div>
+    </div>
+
+    <div class="action-bar">
+      <button type="button" id="btn-render" class="btn btn-primary">🎨 다시 그리기</button>
+      <button type="button" id="btn-load-sample" class="btn btn-secondary">📋 원본 예시 불러오기</button>
+      <button type="button" id="btn-download-png" class="btn btn-outline">💾 이미지 저장(PNG)</button>
+      <button type="button" id="btn-share" class="btn btn-secondary">🔗 공유 링크 생성</button>
+      <button type="button" id="btn-cloud-save" class="btn btn-success" style="display:none;">☁️ 클라우드 저장</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="section-title" id="form-heading">➕ 활동 등록하기</h3>
+    <form id="add-form">
+      <div class="form-grid">
+        <div class="form-group full">
+          <label for="input-title">활동명</label>
+          <input type="text" id="input-title" placeholder="예: 학교수업, 영어학원, 수영, 피아노, 한글" required autocomplete="off" />
+        </div>
+
+        <div class="form-group full">
+          <label>시간 (9시 ~ 21시, 10분 단위)</label>
+          <div class="time-range">
+            <section class="time-picker" aria-labelledby="start-kicker">
+              <div class="time-picker-head">
+                <strong id="start-kicker">시작</strong>
+                <span class="time-readout" id="start-readout">10:00</span>
+              </div>
+              <div class="hour-chips" id="start-hours" role="group" aria-label="시작 시"></div>
+              <div class="minute-chips" id="start-minutes" role="group" aria-label="시작 분"></div>
+              <div class="time-steps">
+                <button type="button" class="time-step" data-target="start" data-delta="-10">−10분</button>
+                <button type="button" class="time-step" data-target="start" data-delta="10">+10분</button>
+              </div>
+            </section>
+
+            <section class="time-picker" aria-labelledby="end-kicker">
+              <div class="time-picker-head">
+                <strong id="end-kicker">종료</strong>
+                <span class="time-readout" id="end-readout">11:30</span>
+              </div>
+              <div class="hour-chips" id="end-hours" role="group" aria-label="종료 시"></div>
+              <div class="minute-chips" id="end-minutes" role="group" aria-label="종료 분"></div>
+              <div class="time-steps">
+                <button type="button" class="time-step" data-target="end" data-delta="-10">−10분</button>
+                <button type="button" class="time-step" data-target="end" data-delta="10">+10분</button>
+              </div>
+            </section>
+          </div>
+          <div class="time-meta">
+            <span id="time-duration">1시간 30분</span>
+            <div class="duration-chips" id="duration-chips" role="group" aria-label="활동 길이"></div>
+          </div>
+        </div>
+
+        <div class="form-group full">
+          <label>요일 (안쪽 월요일 ~ 바깥쪽 일요일, 여러 날 가능)</label>
+          <div class="day-chips" id="input-days" role="group" aria-label="요일 선택">
+            <button type="button" class="day-chip active" data-day="0">월</button>
+            <button type="button" class="day-chip" data-day="1">화</button>
+            <button type="button" class="day-chip" data-day="2">수</button>
+            <button type="button" class="day-chip" data-day="3">목</button>
+            <button type="button" class="day-chip" data-day="4">금</button>
+            <button type="button" class="day-chip" data-day="5">토</button>
+            <button type="button" class="day-chip" data-day="6">일</button>
+          </div>
+          <p class="hint">연속된 요일은 원본처럼 하나의 두꺼운 띠로 그려집니다. 예: 월~금 학교수업</p>
+        </div>
+
+        <div class="form-group full">
+          <label for="input-color">대표 색상</label>
+          <div class="color-picker-row">
+            <input type="color" id="input-color" value="#FF6B6B" />
+            <span id="color-hex">#FF6B6B</span>
+            <div class="swatches" id="color-swatches"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button type="submit" id="btn-submit-activity" class="btn btn-primary">➕ 시간표에 등록</button>
+        <button type="button" id="btn-cancel-edit" class="btn btn-outline" style="display:none;">취소</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="list-header">
+      <span>📋 등록된 활동 목록 (<span id="count-badge">0</span>개)</span>
+      <button type="button" id="btn-clear-all" class="btn btn-sm btn-outline">전체 삭제</button>
+    </div>
+    <ul id="schedule-list-ui" class="schedule-list"></ul>
+  </div>
+</div>
+
+<div id="auth-modal" class="modal-overlay" style="display:none;">
+  <div class="modal-card">
+    <h3>로그인 / 회원가입</h3>
+    <p class="modal-sub">이메일 계정으로 시간표를 안전하게 동기화하세요.</p>
+    <div class="form-group full" style="margin-top:10px;">
+      <label for="auth-email">이메일</label>
+      <input type="email" id="auth-email" placeholder="user@example.com" />
+    </div>
+    <div class="form-group full" style="margin-top:10px;">
+      <label for="auth-password">비밀번호</label>
+      <input type="password" id="auth-password" placeholder="6자리 이상 입력" />
+    </div>
+    <div class="btn-row" style="margin-top:16px;">
+      <button type="button" id="btn-do-login" class="btn btn-primary">로그인</button>
+      <button type="button" id="btn-do-signup" class="btn btn-secondary">회원가입</button>
+      <button type="button" id="btn-close-auth" class="btn btn-outline">닫기</button>
+    </div>
+  </div>
+</div>
+
+<div id="share-modal" class="modal-overlay" style="display:none;">
+  <div class="modal-card">
+    <h3>시간표 공유 링크</h3>
+    <p class="modal-sub">아래 링크를 복사하여 시간표를 공유할 수 있습니다.</p>
+    <input type="text" id="share-url-input" class="form-control" readonly style="margin:12px 0;" />
+    <div class="btn-row">
+      <button type="button" id="btn-copy-url" class="btn btn-primary">링크 복사</button>
+      <button type="button" id="btn-close-share" class="btn btn-secondary">닫기</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js" defer></script>
+</body>
+</html>
