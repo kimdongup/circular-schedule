@@ -16,3 +16,6 @@ Thumbs.db
 *.zip
 pushwing/
 qa-*.mjs
+data/
+*.db
+*.sqlite

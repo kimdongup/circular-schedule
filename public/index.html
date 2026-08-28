@@ -16,6 +16,8 @@
     <div class="auth-box" id="auth-box">
       <span id="user-display">게스트 모드 (로컬 저장 중)</span>
       <div class="btn-group">
+        <button type="button" id="btn-open-push-modal" class="btn btn-sm btn-outline">🔔 푸시 알림</button>
+        <a href="/server-admin" target="_blank" class="btn btn-sm btn-outline" style="text-decoration:none; display:inline-flex; align-items:center;">⚙️ 푸시 관리자</a>
         <button type="button" id="btn-login-modal" class="btn btn-sm btn-secondary">로그인 / 가입</button>
         <button type="button" id="btn-logout" class="btn btn-sm btn-outline" style="display:none;">로그아웃</button>
       </div>
@@ -154,6 +156,45 @@
   </div>
 </div>
 
+<div id="push-modal" class="modal-overlay" style="display:none;">
+  <div class="modal-card" style="max-width: 440px;">
+    <h3>🔔 일정 푸시 알림 (Web Push)</h3>
+    <p class="modal-sub">브라우저나 기기가 닫혀 있어도 일정 알림을 받을 수 있습니다.</p>
+    
+    <div class="push-status-card" style="background:#f8f9fa; border:1px solid #dee2e6; border-radius:8px; padding:12px; margin:12px 0; font-size:0.85rem;">
+      <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+        <span>브라우저 지원:</span>
+        <strong id="push-stat-support">확인 중...</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+        <span>알림 권한:</span>
+        <strong id="push-stat-permission">확인 중...</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between;">
+        <span>구독 상태:</span>
+        <strong id="push-stat-subscribed" style="color:var(--primary);">확인 중...</strong>
+      </div>
+    </div>
+
+    <div class="form-group full" style="margin-top:10px;">
+      <label for="push-user-id">내 식별 ID (기기/사용자 이름)</label>
+      <input type="text" id="push-user-id" value="user-my-schedule" />
+    </div>
+
+    <div class="btn-row" style="margin-top:16px; flex-direction:column; gap:8px;">
+      <button type="button" id="btn-toggle-push-sub" class="btn btn-primary" style="width:100%;">🔔 웹 푸시 알림 받기 (구독)</button>
+      <button type="button" id="btn-send-test-push" class="btn btn-success" style="width:100%;">🚀 나에게 테스트 푸시 보내기</button>
+    </div>
+
+    <div style="margin-top:14px; padding-top:12px; border-top:1px solid #e9ecef; display:flex; justify-content:space-between; align-items:center; font-size:0.8rem;">
+      <a href="/client/index.html" target="_blank" style="color:var(--primary); text-decoration:none;">📱 Pushwing PWA 콘솔</a>
+      <a href="/server-admin" target="_blank" style="color:var(--primary); text-decoration:none;">⚙️ 서버 관리자</a>
+      <button type="button" id="btn-close-push-modal" class="btn btn-sm btn-outline">닫기</button>
+    </div>
+  </div>
+</div>
+
+<script src="/pushwing-client.js"></script>
 <script src="/app.js" defer></script>
 </body>
 </html>

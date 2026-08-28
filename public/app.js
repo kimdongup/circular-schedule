@@ -900,6 +900,129 @@ function setupEvents() {
       loadUserSchedules();
     }
   });
+
+  // ==========================================
+  // Pushwing Web Push 모달 및 이벤트 연결
+  // ==========================================
+  $("btn-open-push-modal").addEventListener("click", async () => {
+    $("push-modal").style.display = "flex";
+    await updatePushStatusUI();
+  });
+
+  $("btn-close-push-modal").addEventListener("click", () => {
+    $("push-modal").style.display = "none";
+  });
+
+  $("btn-toggle-push-sub").addEventListener("click", async () => {
+    if (!pushwingClient) {
+      alert("Pushwing 클라이언트를 로드할 수 없습니다.");
+      return;
+    }
+    const status = await pushwingClient.getSubscriptionStatus();
+    const btn = $("btn-toggle-push-sub");
+    btn.disabled = true;
+    btn.textContent = "처리 중...";
+
+    try {
+      if (status.subscribed) {
+        await pushwingClient.unsubscribe();
+        alert("푸시 알림 구독이 해제되었습니다.");
+      } else {
+        const userId = $("push-user-id").value.trim() || "user-my-schedule";
+        await pushwingClient.subscribe(userId);
+        alert("🔔 웹 푸시 알림 구독이 완료되었습니다!");
+      }
+    } catch (err) {
+      alert("푸시 알림 설정 실패: " + err.message);
+    } finally {
+      btn.disabled = false;
+      await updatePushStatusUI();
+    }
+  });
+
+  $("btn-send-test-push").addEventListener("click", async () => {
+    const userId = $("push-user-id").value.trim();
+    const title = $("schedule-title").value || "나의 일주일 시간표";
+    const btn = $("btn-send-test-push");
+    btn.disabled = true;
+    btn.textContent = "발송 중...";
+
+    try {
+      const res = await fetch("/api/v1/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          app_key: "demo-app-key-2026",
+          user_id: userId || null,
+          title: `⏰ [시간표 알림] ${title}`,
+          body: "잠시 후 등록된 활동 일정이 시작됩니다! (테스트 알림)",
+          url: "/"
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.deliveredCount > 0) {
+          alert(`✅ 테스트 푸시가 성공적으로 전송되었습니다! (수신 기기: ${data.deliveredCount}대)`);
+        } else {
+          alert("구독 중인 기기를 찾을 수 없습니다. 먼저 [🔔 웹 푸시 알림 받기]를 완료해 주세요.");
+        }
+      } else {
+        alert("발송 실패: " + (data.error || "알 수 없는 오류"));
+      }
+    } catch (err) {
+      alert("발송 통신 오류: " + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "🚀 나에게 테스트 푸시 보내기";
+    }
+  });
+}
+
+let pushwingClient = null;
+
+async function initPushwing() {
+  if (typeof PushwingClient !== "undefined") {
+    pushwingClient = new PushwingClient({
+      serverUrl: window.location.origin,
+      appKey: "demo-app-key-2026",
+      swPath: "/sw.js",
+      scope: "/"
+    });
+    await updatePushStatusUI();
+  }
+}
+
+async function updatePushStatusUI() {
+  if (!pushwingClient) return;
+  try {
+    const status = await pushwingClient.getSubscriptionStatus();
+    const supportEl = $("push-stat-support");
+    const permEl = $("push-stat-permission");
+    const subEl = $("push-stat-subscribed");
+    const toggleBtn = $("btn-toggle-push-sub");
+
+    if (supportEl) supportEl.textContent = status.supported ? "✅ 지원됨" : "❌ 미지원";
+    if (permEl) {
+      if (status.permission === "granted") permEl.textContent = "✅ 허용됨";
+      else if (status.permission === "denied") permEl.textContent = "🚫 거부됨";
+      else permEl.textContent = "⏳ 미설정 (동의 필요)";
+    }
+    if (subEl) {
+      subEl.textContent = status.subscribed ? "🔔 수신 중 (구독됨)" : "🔕 미구독";
+      subEl.style.color = status.subscribed ? "var(--success)" : "var(--danger)";
+    }
+    if (toggleBtn) {
+      if (status.subscribed) {
+        toggleBtn.textContent = "🔕 푸시 알림 구독 해제";
+        toggleBtn.className = "btn btn-outline-danger";
+      } else {
+        toggleBtn.textContent = "🔔 웹 푸시 알림 받기 (구독)";
+        toggleBtn.className = "btn btn-primary";
+      }
+    }
+  } catch (e) {
+    console.warn("Error updating push status UI:", e);
+  }
 }
 
 function handleUserLogin(user) {
@@ -909,6 +1032,10 @@ function handleUserLogin(user) {
   $("btn-logout").style.display = "inline-block";
   $("btn-cloud-save").style.display = "inline-block";
   $("cloud-schedules-bar").style.display = "block";
+  const pushUserId = $("push-user-id");
+  if (pushUserId && user.email) {
+    pushUserId.value = user.email;
+  }
   loadUserSchedules();
 }
 
@@ -960,6 +1087,7 @@ async function init() {
   loadLocalSchedule();
   renderList();
   renderSchedule();
+  await initPushwing();
   await initSupabase();
   await maybeLoadSharedSchedule();
   renderList();

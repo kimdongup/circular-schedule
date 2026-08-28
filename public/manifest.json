@@ -1,0 +1,16 @@
+{
+  "name": "원형 하루 시간표 (Circular Schedule)",
+  "short_name": "원형시간표",
+  "description": "인터랙티브 24시간 원형 주간 시간표 & 일정 푸시 알림",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4c6ef5",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

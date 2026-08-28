@@ -1,53 +1,25 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { customAlphabet } = require('nanoid');
-require('dotenv').config();
-
-const db = require('./src/db');
-const vapid = require('./src/vapid');
-const { sendNotificationToSubscriptions } = require('./src/pushService');
+const db = require('./db');
+const vapid = require('./vapid');
+const { sendNotificationToSubscriptions } = require('./pushService');
 
 const app = express();
-const PORT = process.env.PORT || 10000;
-const HOST = '0.0.0.0';
 
-const nanoid = customAlphabet('1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', 6);
-
-app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 
-// ==========================================
-// 정적 파일 서빙 (Static File Serving)
-// ==========================================
-// 1. Pushwing 클라이언트 PWA (/client)
-app.use('/client', express.static(path.join(__dirname, 'client')));
+// Serve Client PWA files and Admin Console files
+app.use('/client', express.static(path.join(__dirname, '../client')));
+app.use('/admin', express.static(path.join(__dirname, '../admin')));
+app.use(express.static(path.join(__dirname, '../public')));
 
-// 2. Pushwing 서버 관리자 콘솔 (/admin)
-app.use('/admin', express.static(path.join(__dirname, 'admin')));
-
-// 3. 원형 시간표 웹 앱 (/ 및 /public)
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Pushwing 관리자 콘솔 페이지
 app.get('/server-admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'admin', 'index.html'));
+  res.sendFile(path.join(__dirname, '../admin/index.html'));
 });
 
-// ==========================================
-// 🔔 Pushwing Web Push (PWA) REST API v1
-// ==========================================
-
-// 1. VAPID 공개키 조회
-app.get('/api/v1/vapid-key', (req, res) => {
-  res.json({
-    success: true,
-    vapidPublicKey: vapid.publicKey
-  });
-});
-
-// 2. 관리자 통계 조회
+// Admin Stats API
 app.get('/api/v1/admin/stats', async (req, res) => {
   try {
     const stats = await db.getStats();
@@ -65,7 +37,37 @@ app.get('/api/v1/admin/stats', async (req, res) => {
   }
 });
 
-// 3. 앱(테넌트) 목록 조회
+// Delete App
+app.delete('/api/v1/apps/:app_key', async (req, res) => {
+  try {
+    const { app_key } = req.params;
+    const result = await db.deleteApp(app_key);
+    res.json({ success: true, deletedCount: result.deletedCount });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Delete Subscription by ID
+app.delete('/api/v1/subscriptions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await db.deleteSubscriptionById(id);
+    res.json({ success: true, deletedCount: result.deletedCount });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 1. Get VAPID Public Key
+app.get('/api/v1/vapid-key', (req, res) => {
+  res.json({
+    success: true,
+    vapidPublicKey: vapid.publicKey
+  });
+});
+
+// 2. List Apps
 app.get('/api/v1/apps', async (req, res) => {
   try {
     const apps = await db.listApps();
@@ -75,7 +77,7 @@ app.get('/api/v1/apps', async (req, res) => {
   }
 });
 
-// 4. 신규 앱(테넌트) 생성
+// 3. Create App
 app.post('/api/v1/apps', async (req, res) => {
   try {
     const { app_name, app_key, secret_key } = req.body;
@@ -92,18 +94,7 @@ app.post('/api/v1/apps', async (req, res) => {
   }
 });
 
-// 5. 앱 삭제
-app.delete('/api/v1/apps/:app_key', async (req, res) => {
-  try {
-    const { app_key } = req.params;
-    const result = await db.deleteApp(app_key);
-    res.json({ success: true, deletedCount: result.deletedCount });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 6. 웹 푸시 구독(Subscription) 등록 / 갱신
+// 4. Register / Update Subscription
 app.post('/api/v1/subscribe', async (req, res) => {
   try {
     const { app_key, user_id, subscription } = req.body;
@@ -142,7 +133,7 @@ app.post('/api/v1/subscribe', async (req, res) => {
   }
 });
 
-// 7. 구독 해제
+// 5. Unsubscribe
 app.post('/api/v1/unsubscribe', async (req, res) => {
   try {
     const { endpoint } = req.body;
@@ -156,7 +147,7 @@ app.post('/api/v1/unsubscribe', async (req, res) => {
   }
 });
 
-// 8. 푸시 알림 발송 (Push Dispatcher)
+// 6. Push Dispatch Endpoint
 app.post('/api/v1/push', async (req, res) => {
   try {
     const { app_key, secret_key, user_id, title, body, url, icon, badge, extraData } = req.body;
@@ -173,6 +164,7 @@ app.post('/api/v1/push', async (req, res) => {
       return res.status(404).json({ success: false, error: `App key '${app_key}' not found` });
     }
 
+    // Optional secret key check for secure API usage
     if (secret_key && app.secret_key !== secret_key) {
       return res.status(401).json({ success: false, error: 'Invalid secret_key for this app' });
     }
@@ -189,9 +181,9 @@ app.post('/api/v1/push', async (req, res) => {
     const result = await sendNotificationToSubscriptions(subscriptions, {
       title,
       body,
-      url: url || '/',
-      icon: icon || '/favicon.ico',
-      badge: badge || '/favicon.ico',
+      url,
+      icon,
+      badge,
       extraData
     });
 
@@ -216,7 +208,7 @@ app.post('/api/v1/push', async (req, res) => {
   }
 });
 
-// 9. 구독자 목록 조회
+// 7. Get Subscriptions List
 app.get('/api/v1/subscriptions', async (req, res) => {
   try {
     const { app_key, user_id } = req.query;
@@ -230,18 +222,7 @@ app.get('/api/v1/subscriptions', async (req, res) => {
   }
 });
 
-// 10. 특정 구독 삭제
-app.delete('/api/v1/subscriptions/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const result = await db.deleteSubscriptionById(id);
-    res.json({ success: true, deletedCount: result.deletedCount });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 11. 푸시 발송 로그 조회
+// 8. Get Push Logs
 app.get('/api/v1/logs', async (req, res) => {
   try {
     const { app_key } = req.query;
@@ -252,50 +233,4 @@ app.get('/api/v1/logs', async (req, res) => {
   }
 });
 
-// ==========================================
-// 📅 원형 시간표 웹 앱 API & 라우트
-// ==========================================
-
-// 헬스 체크
-app.get('/health', (req, res) => {
-  res.status(200).send('OK');
-});
-
-// Supabase 환경 변수 제공
-app.get('/api/config', (req, res) => {
-  res.json({
-    supabaseUrl: process.env.SUPABASE_URL || '',
-    supabaseAnonKey: process.env.SUPABASE_ANON_KEY || ''
-  });
-});
-
-// 시간표 고유 ID 발급
-app.get('/api/generate-id', (req, res) => {
-  res.json({ id: nanoid() });
-});
-
-// 공유 링크 라우트
-app.get('/s/:id', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// SPA Fallback
-app.get('*', (req, res) => {
-  if (req.path.startsWith('/api/') || req.path.startsWith('/client/') || req.path.startsWith('/admin/')) {
-    return res.status(404).json({ error: 'Not found' });
-  }
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// ==========================================
-// 서버 시작
-// ==========================================
-app.listen(PORT, HOST, () => {
-  console.log('====================================================');
-  console.log(`🚀 Combined Render Service running on http://${HOST}:${PORT}`);
-  console.log(`📅 Circular Schedule: http://${HOST}:${PORT}`);
-  console.log(`🔔 Pushwing Server Admin: http://${HOST}:${PORT}/server-admin`);
-  console.log(`📱 Pushwing PWA Client: http://${HOST}:${PORT}/client/index.html`);
-  console.log(`🔑 VAPID Public Key: ${vapid.publicKey}`);
-  console.log('====================================================');
-});
+module.exports = app;
