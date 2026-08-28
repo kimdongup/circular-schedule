@@ -16,6 +16,7 @@
     return outputArray;
   }
 
+  class PushwingClient {
     constructor(options = {}) {
       this.serverUrl = options.serverUrl || window.location.origin;
       this.appKey = options.appKey || 'demo-app-key-2026';

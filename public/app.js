@@ -988,23 +988,45 @@ async function initPushwing() {
       swPath: "/sw.js",
       scope: "/"
     });
-    await updatePushStatusUI();
   }
+  await updatePushStatusUI();
 }
 
 async function updatePushStatusUI() {
-  if (!pushwingClient) return;
+  const supportEl = $("push-stat-support");
+  const permEl = $("push-stat-permission");
+  const subEl = $("push-stat-subscribed");
+  const toggleBtn = $("btn-toggle-push-sub");
+
+  const isSupported = ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window);
+  if (supportEl) supportEl.textContent = isSupported ? "✅ 지원됨" : "❌ 미지원 (브라우저 확인)";
+
+  if (typeof Notification !== "undefined" && permEl) {
+    if (Notification.permission === "granted") permEl.textContent = "✅ 허용됨";
+    else if (Notification.permission === "denied") permEl.textContent = "🚫 거부됨 (설정에서 허용 필요)";
+    else permEl.textContent = "⏳ 미설정 (동의 필요)";
+  }
+
+  if (!pushwingClient && typeof PushwingClient !== "undefined") {
+    pushwingClient = new PushwingClient({
+      serverUrl: window.location.origin,
+      appKey: "demo-app-key-2026",
+      swPath: "/sw.js",
+      scope: "/"
+    });
+  }
+
+  if (!pushwingClient) {
+    if (subEl) subEl.textContent = "⏳ 초기화 중...";
+    return;
+  }
+
   try {
     const status = await pushwingClient.getSubscriptionStatus();
-    const supportEl = $("push-stat-support");
-    const permEl = $("push-stat-permission");
-    const subEl = $("push-stat-subscribed");
-    const toggleBtn = $("btn-toggle-push-sub");
-
     if (supportEl) supportEl.textContent = status.supported ? "✅ 지원됨" : "❌ 미지원";
     if (permEl) {
       if (status.permission === "granted") permEl.textContent = "✅ 허용됨";
-      else if (status.permission === "denied") permEl.textContent = "🚫 거부됨";
+      else if (status.permission === "denied") permEl.textContent = "🚫 거부됨 (설정에서 허용 필요)";
       else permEl.textContent = "⏳ 미설정 (동의 필요)";
     }
     if (subEl) {

@@ -1,9 +1,23 @@
 const { createClient } = require('@supabase/supabase-js');
+const SqliteAdapter = require('./sqliteAdapter');
+
+const DEFAULT_ADMIN_EMAILS = ['kimdongup@gmail.com'];
+
+function isTableMissing(error) {
+  if (!error) return false;
+  return (
+    error.code === 'PGRST205' ||
+    error.code === '42P01' ||
+    (typeof error.message === 'string' && error.message.includes('schema cache')) ||
+    (typeof error.message === 'string' && error.message.includes('does not exist'))
+  );
+}
 
 class SupabaseAdapter {
   constructor(options = {}) {
     this.supabaseUrl = options.supabaseUrl || process.env.SUPABASE_URL;
     this.supabaseKey = options.supabaseKey || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    this.fallbackSqlite = new SqliteAdapter(options);
 
     if (!this.supabaseUrl || !this.supabaseKey) {
       throw new Error('[SupabaseAdapter] SUPABASE_URL and SUPABASE_ANON_KEY (or SERVICE_ROLE_KEY) are required.');
@@ -20,182 +34,305 @@ class SupabaseAdapter {
   }
 
   async init() {
+    // 1. Always seed SQLite fallback
     try {
-      // Check if demo app exists, if not create it
-      const { data } = await this.client.from('apps').select('app_key').eq('app_key', 'demo-app-key-2026').maybeSingle();
-      if (!data) {
+      await this.fallbackSqlite.grantAdminRole('kimdongup@gmail.com');
+    } catch (e) {}
+
+    // 2. Attempt Supabase seeding
+    try {
+      const { data, error } = await this.client.from('apps').select('app_key').eq('app_key', 'demo-app-key-2026').maybeSingle();
+      if (!error && !data) {
         await this.client.from('apps').insert({
           app_key: 'demo-app-key-2026',
           app_name: 'Pushwing Demo App',
           secret_key: 'demo-secret-key-2026'
         });
       }
+      // Seed default admin in Supabase
+      await this.client.from('user_roles').upsert({
+        email: 'kimdongup@gmail.com',
+        role: 'admin'
+      }, { onConflict: 'email' });
     } catch (e) {
-      console.warn('[SupabaseAdapter] Init check:', e.message);
+      console.warn('[SupabaseAdapter] Notice during init (Tables might not be created in Supabase yet):', e.message);
     }
   }
 
   async getApp(appKey) {
-    const { data, error } = await this.client
-      .from('apps')
-      .select('*')
-      .eq('app_key', appKey)
-      .maybeSingle();
+    try {
+      const { data, error } = await this.client
+        .from('apps')
+        .select('*')
+        .eq('app_key', appKey)
+        .maybeSingle();
 
-    if (error) throw error;
-    return data;
+      if (error) {
+        if (isTableMissing(error)) {
+          console.warn(`[SupabaseAdapter] 'apps' table not in Supabase schema cache. Using fallback SQLite.`);
+          return this.fallbackSqlite.getApp(appKey);
+        }
+        throw error;
+      }
+      if (!data) {
+        // Check fallback if not found in Supabase
+        return this.fallbackSqlite.getApp(appKey);
+      }
+      return data;
+    } catch (err) {
+      if (isTableMissing(err)) {
+        return this.fallbackSqlite.getApp(appKey);
+      }
+      throw err;
+    }
   }
 
   async createApp(appKey, appName, secretKey) {
-    const { data, error } = await this.client
-      .from('apps')
-      .insert({
-        app_key: appKey,
-        app_name: appName,
-        secret_key: secretKey
-      })
-      .select()
-      .single();
+    try {
+      const { data, error } = await this.client
+        .from('apps')
+        .insert({
+          app_key: appKey,
+          app_name: appName,
+          secret_key: secretKey
+        })
+        .select()
+        .single();
 
-    if (error) throw error;
-    return data || { app_key: appKey, app_name: appName, secret_key: secretKey };
+      if (error) {
+        if (isTableMissing(error)) {
+          console.warn(`[SupabaseAdapter] 'apps' table missing in Supabase. Creating in fallback SQLite.`);
+          return this.fallbackSqlite.createApp(appKey, appName, secretKey);
+        }
+        throw error;
+      }
+      // Also sync to SQLite fallback
+      this.fallbackSqlite.createApp(appKey, appName, secretKey).catch(() => {});
+      return data || { app_key: appKey, app_name: appName, secret_key: secretKey };
+    } catch (err) {
+      if (isTableMissing(err)) {
+        return this.fallbackSqlite.createApp(appKey, appName, secretKey);
+      }
+      throw err;
+    }
   }
 
   async listApps() {
-    const { data, error } = await this.client
-      .from('apps')
-      .select('app_key, app_name, created_at')
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await this.client
+        .from('apps')
+        .select('app_key, app_name, created_at')
+        .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    return data || [];
+      if (error) {
+        if (isTableMissing(error)) {
+          return this.fallbackSqlite.listApps();
+        }
+        throw error;
+      }
+      if (!data || data.length === 0) {
+        return this.fallbackSqlite.listApps();
+      }
+      return data;
+    } catch (err) {
+      if (isTableMissing(err)) {
+        return this.fallbackSqlite.listApps();
+      }
+      throw err;
+    }
   }
 
   async deleteApp(appKey) {
-    const { error } = await this.client
-      .from('apps')
-      .delete()
-      .eq('app_key', appKey);
+    try {
+      const { error } = await this.client
+        .from('apps')
+        .delete()
+        .eq('app_key', appKey);
 
-    if (error) throw error;
-    return { deletedCount: 1 };
+      if (error && isTableMissing(error)) {
+        return this.fallbackSqlite.deleteApp(appKey);
+      }
+      this.fallbackSqlite.deleteApp(appKey).catch(() => {});
+      return { deletedCount: 1 };
+    } catch (err) {
+      if (isTableMissing(err)) {
+        return this.fallbackSqlite.deleteApp(appKey);
+      }
+      throw err;
+    }
   }
 
   async upsertSubscription({ app_key, user_id, endpoint, p256dh, auth, user_agent }) {
-    const { data, error } = await this.client
-      .from('subscriptions')
-      .upsert(
-        {
-          app_key,
-          user_id,
-          endpoint,
-          p256dh,
-          auth,
-          user_agent,
-          updated_at: new Date().toISOString()
-        },
-        { onConflict: 'endpoint' }
-      )
-      .select('id')
-      .maybeSingle();
+    try {
+      // Ensure app exists in fallback as well
+      await this.fallbackSqlite.upsertSubscription({ app_key, user_id, endpoint, p256dh, auth, user_agent });
 
-    if (error) throw error;
-    return { id: data ? data.id : 1 };
+      const { data, error } = await this.client
+        .from('subscriptions')
+        .upsert(
+          {
+            app_key,
+            user_id,
+            endpoint,
+            p256dh,
+            auth,
+            user_agent,
+            updated_at: new Date().toISOString()
+          },
+          { onConflict: 'endpoint' }
+        )
+        .select('id')
+        .maybeSingle();
+
+      if (error) {
+        if (isTableMissing(error)) {
+          return { id: 1 };
+        }
+        console.warn('[SupabaseAdapter] Subscription upsert error:', error.message);
+      }
+      return { id: (data && data.id) || 1 };
+    } catch (err) {
+      if (isTableMissing(err)) {
+        return { id: 1 };
+      }
+      return { id: 1 };
+    }
   }
 
   async getSubscriptions(appKey, userId = null) {
-    let query = this.client
-      .from('subscriptions')
-      .select('*')
-      .eq('app_key', appKey);
+    try {
+      let query = this.client
+        .from('subscriptions')
+        .select('*')
+        .eq('app_key', appKey);
 
-    if (userId) {
-      query = query.eq('user_id', userId);
+      if (userId) {
+        query = query.eq('user_id', userId);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        if (isTableMissing(error)) {
+          return this.fallbackSqlite.getSubscriptions(appKey, userId);
+        }
+        throw error;
+      }
+      if (!data || data.length === 0) {
+        return this.fallbackSqlite.getSubscriptions(appKey, userId);
+      }
+      return data;
+    } catch (err) {
+      if (isTableMissing(err)) {
+        return this.fallbackSqlite.getSubscriptions(appKey, userId);
+      }
+      throw err;
     }
-
-    const { data, error } = await query;
-    if (error) throw error;
-    return data || [];
   }
 
   async deleteSubscriptionByEndpoint(endpoint) {
-    const { error } = await this.client
-      .from('subscriptions')
-      .delete()
-      .eq('endpoint', endpoint);
+    try {
+      const { error } = await this.client
+        .from('subscriptions')
+        .delete()
+        .eq('endpoint', endpoint);
 
-    if (error) throw error;
-    return { deletedCount: 1 };
+      this.fallbackSqlite.deleteSubscriptionByEndpoint(endpoint).catch(() => {});
+      return { deletedCount: 1 };
+    } catch (err) {
+      return this.fallbackSqlite.deleteSubscriptionByEndpoint(endpoint);
+    }
   }
 
   async deleteSubscriptionById(id) {
-    const { error } = await this.client
-      .from('subscriptions')
-      .delete()
-      .eq('id', id);
+    try {
+      const { error } = await this.client
+        .from('subscriptions')
+        .delete()
+        .eq('id', id);
 
-    if (error) throw error;
-    return { deletedCount: 1 };
+      this.fallbackSqlite.deleteSubscriptionById(id).catch(() => {});
+      return { deletedCount: 1 };
+    } catch (err) {
+      return this.fallbackSqlite.deleteSubscriptionById(id);
+    }
   }
 
   async getStats() {
-    const [appsRes, subsRes, logsRes] = await Promise.all([
-      this.client.from('apps').select('*', { count: 'exact', head: true }),
-      this.client.from('subscriptions').select('*', { count: 'exact', head: true }),
-      this.client.from('push_logs').select('success_count')
-    ]);
+    try {
+      const [appsRes, subsRes, logsRes] = await Promise.all([
+        this.client.from('apps').select('*', { count: 'exact', head: true }),
+        this.client.from('subscriptions').select('*', { count: 'exact', head: true }),
+        this.client.from('push_logs').select('success_count')
+      ]);
 
-    const totalApps = appsRes.count || 0;
-    const totalSubscriptions = subsRes.count || 0;
-    const logs = logsRes.data || [];
-    const totalLogs = logs.length;
-    const totalSent = logs.reduce((sum, row) => sum + (row.success_count || 0), 0);
+      if (appsRes.error && isTableMissing(appsRes.error)) {
+        return this.fallbackSqlite.getStats();
+      }
 
-    return {
-      totalApps,
-      totalSubscriptions,
-      totalLogs,
-      totalSent
-    };
+      const totalApps = appsRes.count || 0;
+      const totalSubscriptions = subsRes.count || 0;
+      const logs = logsRes.data || [];
+      const totalLogs = logs.length;
+      const totalSent = logs.reduce((sum, row) => sum + (row.success_count || 0), 0);
+
+      return { totalApps, totalSubscriptions, totalLogs, totalSent };
+    } catch (err) {
+      return this.fallbackSqlite.getStats();
+    }
   }
 
   async createPushLog({ app_key, title, body, url, success_count, fail_count }) {
-    const { data, error } = await this.client
-      .from('push_logs')
-      .insert({
-        app_key,
-        title,
-        body,
-        url,
-        success_count,
-        fail_count
-      })
-      .select('id')
-      .maybeSingle();
+    try {
+      this.fallbackSqlite.createPushLog({ app_key, title, body, url, success_count, fail_count }).catch(() => {});
 
-    if (error) throw error;
-    return { id: data ? data.id : 1 };
+      const { data, error } = await this.client
+        .from('push_logs')
+        .insert({ app_key, title, body, url, success_count, fail_count })
+        .select('id')
+        .maybeSingle();
+
+      if (error && isTableMissing(error)) {
+        return { id: 1 };
+      }
+      return { id: (data && data.id) || 1 };
+    } catch (err) {
+      return { id: 1 };
+    }
   }
 
   async getPushLogs(appKey = null) {
-    let query = this.client
-      .from('push_logs')
-      .select('*')
-      .order('sent_at', { ascending: false })
-      .limit(50);
+    try {
+      let query = this.client
+        .from('push_logs')
+        .select('*')
+        .order('sent_at', { ascending: false })
+        .limit(50);
 
-    if (appKey) {
-      query = query.eq('app_key', appKey);
+      if (appKey) {
+        query = query.eq('app_key', appKey);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        if (isTableMissing(error)) {
+          return this.fallbackSqlite.getPushLogs(appKey);
+        }
+        throw error;
+      }
+      if (!data || data.length === 0) {
+        return this.fallbackSqlite.getPushLogs(appKey);
+      }
+      return data;
+    } catch (err) {
+      return this.fallbackSqlite.getPushLogs(appKey);
     }
-
-    const { data, error } = await query;
-    if (error) throw error;
-    return data || [];
   }
 
   async isAdmin(userId, email) {
-    const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
-    if (email && adminEmails.includes(email.toLowerCase())) {
+    const envAdmins = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+    const allAdmins = [...DEFAULT_ADMIN_EMAILS.map(e => e.toLowerCase()), ...envAdmins];
+
+    if (email && allAdmins.includes(email.toLowerCase())) {
       return true;
     }
 
@@ -215,39 +352,62 @@ class SupabaseAdapter {
       if (!error && data && data.role === 'admin') {
         return true;
       }
+      if (error && isTableMissing(error)) {
+        return this.fallbackSqlite.isAdmin(userId, email);
+      }
     } catch (e) {
-      console.warn('[SupabaseAdapter] isAdmin check error:', e.message);
+      return this.fallbackSqlite.isAdmin(userId, email);
     }
 
-    return false;
+    return this.fallbackSqlite.isAdmin(userId, email);
   }
 
   async grantAdminRole(email, userId = null) {
-    const { data, error } = await this.client
-      .from('user_roles')
-      .upsert(
-        {
-          email,
-          user_id: userId,
-          role: 'admin'
-        },
-        { onConflict: 'email' }
-      )
-      .select()
-      .single();
+    try {
+      this.fallbackSqlite.grantAdminRole(email, userId).catch(() => {});
 
-    if (error) throw error;
-    return data;
+      const { data, error } = await this.client
+        .from('user_roles')
+        .upsert(
+          {
+            email,
+            user_id: userId,
+            role: 'admin'
+          },
+          { onConflict: 'email' }
+        )
+        .select()
+        .single();
+
+      if (error && isTableMissing(error)) {
+        return { success: true, email };
+      }
+      return data || { success: true, email };
+    } catch (err) {
+      return { success: true, email };
+    }
   }
 
   async listUserRoles() {
-    const { data, error } = await this.client
-      .from('user_roles')
-      .select('email, user_id, role, created_at')
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await this.client
+        .from('user_roles')
+        .select('email, user_id, role, created_at')
+        .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    return data || [];
+      if (error) {
+        if (isTableMissing(error)) {
+          return this.fallbackSqlite.listUserRoles();
+        }
+        throw error;
+      }
+      if (!data || data.length === 0) {
+        return this.fallbackSqlite.listUserRoles();
+      }
+      return data;
+    } catch (err) {
+      return this.fallbackSqlite.listUserRoles();
+    }
   }
 }
 

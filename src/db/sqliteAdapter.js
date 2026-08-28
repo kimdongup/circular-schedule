@@ -220,8 +220,11 @@ class SqliteAdapter {
 
   isAdmin(userId, email) {
     return new Promise((resolve) => {
-      const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
-      if (email && adminEmails.includes(email.toLowerCase())) {
+      const defaultAdmins = ['kimdongup@gmail.com'];
+      const envAdmins = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+      const allAdmins = [...defaultAdmins, ...envAdmins];
+
+      if (email && allAdmins.includes(email.toLowerCase())) {
         return resolve(true);
       }
       if (!email && !userId) return resolve(false);
@@ -233,8 +236,7 @@ class SqliteAdapter {
           if (!err && row && row.role === 'admin') {
             resolve(true);
           } else {
-            // Default first user or if no admin configured at all
-            resolve(adminEmails.length === 0 && !email);
+            resolve(false);
           }
         }
       );

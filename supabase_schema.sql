@@ -128,3 +128,8 @@ using (true);
 insert into public.apps (app_key, app_name, secret_key)
 values ('demo-app-key-2026', 'Pushwing Demo App', 'demo-secret-key-2026')
 on conflict (app_key) do nothing;
+
+-- 7. kimdongup@gmail.com 관리자 롤 자동 부여
+insert into public.user_roles (email, role)
+values ('kimdongup@gmail.com', 'admin')
+on conflict (email) do update set role = 'admin';
