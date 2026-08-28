@@ -1025,6 +1025,35 @@ async function updatePushStatusUI() {
   }
 }
 
+async function checkAdminAccess() {
+  const adminBtn = $("btn-admin-panel-link");
+  if (!adminBtn) return;
+  if (!supabase || !currentUser) {
+    adminBtn.style.display = "none";
+    return;
+  }
+
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session || !session.access_token) {
+      adminBtn.style.display = "none";
+      return;
+    }
+
+    const res = await fetch("/api/v1/auth/check-admin", {
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    });
+    const result = await res.json();
+    if (result.success && result.isAdmin) {
+      adminBtn.style.display = "inline-flex";
+    } else {
+      adminBtn.style.display = "none";
+    }
+  } catch (e) {
+    adminBtn.style.display = "none";
+  }
+}
+
 function handleUserLogin(user) {
   currentUser = user;
   $("user-display").textContent = `👤 ${user.email}`;
@@ -1037,6 +1066,7 @@ function handleUserLogin(user) {
     pushUserId.value = user.email;
   }
   loadUserSchedules();
+  checkAdminAccess();
 }
 
 function handleUserLogout() {
@@ -1048,6 +1078,8 @@ function handleUserLogout() {
   $("cloud-schedules-bar").style.display = "none";
   const delBtn = $("btn-delete-cloud-schedule");
   if (delBtn) delBtn.style.display = "none";
+  const adminBtn = $("btn-admin-panel-link");
+  if (adminBtn) adminBtn.style.display = "none";
 }
 
 async function loadUserSchedules() {

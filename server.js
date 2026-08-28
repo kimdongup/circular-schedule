@@ -36,10 +36,93 @@ app.get('/server-admin', (req, res) => {
 });
 
 // ==========================================
+// 🛡️ 관리자 롤 (Admin Role) 인증 및 검증 로직
+// ==========================================
+const { createClient } = require('@supabase/supabase-js');
+
+async function verifyAdminUser(req) {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : (req.query.token || req.headers['x-access-token']);
+
+  if (!token) {
+    return { isAdmin: false, error: '로그인 토큰이 제공되지 않았습니다.' };
+  }
+
+  if (process.env.SUPABASE_URL && (process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)) {
+    try {
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+      const supabaseAuth = createClient(process.env.SUPABASE_URL, key, {
+        auth: { autoRefreshToken: false, persistSession: false }
+      });
+      const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
+      if (error || !user) {
+        return { isAdmin: false, error: '유효하지 않거나 만료된 로그인 세션입니다.' };
+      }
+
+      const isAdmin = await db.isAdmin(user.id, user.email);
+      return { isAdmin, user };
+    } catch (err) {
+      return { isAdmin: false, error: err.message };
+    }
+  }
+
+  return { isAdmin: true, user: { email: 'local-admin' } };
+}
+
+async function requireAdminAuth(req, res, next) {
+  // 1. 머신-투-머신 REST API 시크릿 키 검증 통과 허용
+  if (req.body && req.body.secret_key && req.body.app_key) {
+    try {
+      const app = await db.getApp(req.body.app_key);
+      if (app && app.secret_key === req.body.secret_key) {
+        return next();
+      }
+    } catch (e) {}
+  }
+
+  // 2. 관리자 사용자 세션 토큰 검증
+  const { isAdmin, user, error } = await verifyAdminUser(req);
+  if (!isAdmin) {
+    return res.status(403).json({
+      success: false,
+      error: error || '접근이 거부되었습니다: 관리자(Admin) 권한이 필요합니다.'
+    });
+  }
+
+  req.adminUser = user;
+  next();
+}
+
+// 0. 관리자 권한 확인 API (클라이언트 UI에서 관리자 버튼 표시 여부 판단)
+app.get('/api/v1/auth/check-admin', async (req, res) => {
+  const { isAdmin, user, error } = await verifyAdminUser(req);
+  res.json({
+    success: true,
+    isAdmin: Boolean(isAdmin),
+    user: user ? { id: user.id, email: user.email } : null,
+    error: isAdmin ? null : (error || '관리자 권한이 없습니다.')
+  });
+});
+
+// 관리자 롤 부여 API (기존 관리자만 타인에게 부여 가능)
+app.post('/api/v1/admin/grant-role', requireAdminAuth, async (req, res) => {
+  try {
+    const { email, user_id } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'email is required' });
+    }
+    const result = await db.grantAdminRole(email, user_id);
+    res.json({ success: true, message: `${email} 님에게 관리자 롤을 부여했습니다.`, result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ==========================================
 // 🔔 Pushwing Web Push (PWA) REST API v1
 // ==========================================
 
-// 1. VAPID 공개키 조회
+// 1. VAPID 공개키 조회 (공개)
 app.get('/api/v1/vapid-key', (req, res) => {
   res.json({
     success: true,
@@ -47,8 +130,8 @@ app.get('/api/v1/vapid-key', (req, res) => {
   });
 });
 
-// 2. 관리자 통계 조회
-app.get('/api/v1/admin/stats', async (req, res) => {
+// 2. 관리자 통계 조회 (관리자 전용)
+app.get('/api/v1/admin/stats', requireAdminAuth, async (req, res) => {
   try {
     const stats = await db.getStats();
     res.json({
@@ -75,8 +158,8 @@ app.get('/api/v1/apps', async (req, res) => {
   }
 });
 
-// 4. 신규 앱(테넌트) 생성
-app.post('/api/v1/apps', async (req, res) => {
+// 4. 신규 앱(테넌트) 생성 (관리자 전용)
+app.post('/api/v1/apps', requireAdminAuth, async (req, res) => {
   try {
     const { app_name, app_key, secret_key } = req.body;
     if (!app_name) {
@@ -92,8 +175,8 @@ app.post('/api/v1/apps', async (req, res) => {
   }
 });
 
-// 5. 앱 삭제
-app.delete('/api/v1/apps/:app_key', async (req, res) => {
+// 5. 앱 삭제 (관리자 전용)
+app.delete('/api/v1/apps/:app_key', requireAdminAuth, async (req, res) => {
   try {
     const { app_key } = req.params;
     const result = await db.deleteApp(app_key);
@@ -173,6 +256,7 @@ app.post('/api/v1/push', async (req, res) => {
       return res.status(404).json({ success: false, error: `App key '${app_key}' not found` });
     }
 
+    // If secret_key not provided, verify admin session
     if (secret_key && app.secret_key !== secret_key) {
       return res.status(401).json({ success: false, error: 'Invalid secret_key for this app' });
     }
@@ -216,8 +300,8 @@ app.post('/api/v1/push', async (req, res) => {
   }
 });
 
-// 9. 구독자 목록 조회
-app.get('/api/v1/subscriptions', async (req, res) => {
+// 9. 구독자 목록 조회 (관리자 전용)
+app.get('/api/v1/subscriptions', requireAdminAuth, async (req, res) => {
   try {
     const { app_key, user_id } = req.query;
     if (!app_key) {
@@ -230,8 +314,8 @@ app.get('/api/v1/subscriptions', async (req, res) => {
   }
 });
 
-// 10. 특정 구독 삭제
-app.delete('/api/v1/subscriptions/:id', async (req, res) => {
+// 10. 특정 구독 삭제 (관리자 전용)
+app.delete('/api/v1/subscriptions/:id', requireAdminAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const result = await db.deleteSubscriptionById(id);
@@ -241,12 +325,22 @@ app.delete('/api/v1/subscriptions/:id', async (req, res) => {
   }
 });
 
-// 11. 푸시 발송 로그 조회
-app.get('/api/v1/logs', async (req, res) => {
+// 11. 푸시 발송 로그 조회 (관리자 전용)
+app.get('/api/v1/logs', requireAdminAuth, async (req, res) => {
   try {
     const { app_key } = req.query;
     const logs = await db.getPushLogs(app_key || null);
     res.json({ success: true, count: logs.length, logs });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 12. 관리자 유저 목록 조회 (관리자 전용)
+app.get('/api/v1/admin/users', requireAdminAuth, async (req, res) => {
+  try {
+    const users = await db.listUserRoles();
+    res.json({ success: true, count: users.length, users });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

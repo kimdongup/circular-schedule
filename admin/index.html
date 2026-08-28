@@ -58,151 +58,203 @@
 
   <header>
     <h1>⚙️ Pushwing Server Admin <span class="badge">서버 관리 화면</span></h1>
-    <div>
-      <a href="/client/index.html" target="_blank" class="btn btn-outline">📱 PWA 클라이언트 콘솔 열기</a>
+    <div style="display: flex; gap: 8px; align-items: center;">
+      <span id="admin-user-info" style="font-size: 0.85rem; color: var(--text-muted);">확인 중...</span>
+      <button type="button" id="btn-admin-logout" class="btn btn-outline btn-sm" style="display: none;">로그아웃</button>
+      <a href="/" class="btn btn-outline btn-sm">📅 시간표 앱</a>
+      <a href="/client/index.html" target="_blank" class="btn btn-outline btn-sm">📱 PWA 콘솔</a>
     </div>
   </header>
 
-  <!-- Server System Stats -->
-  <div class="stats-grid">
-    <div class="stat-card">
-      <div class="label">등록된 App Key (테넌트)</div>
-      <div id="stat-apps" class="val">0</div>
+  <!-- Admin Auth Gate (Shown when not logged in as Admin) -->
+  <div id="admin-auth-gate" class="card" style="display: none; max-width: 480px; margin: 40px auto; text-align: center;">
+    <h2 style="justify-content: center; border: none; font-size: 1.3rem;">🔒 관리자 인증 필요</h2>
+    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 18px;">
+      이 화면은 <strong>관리자 롤(Admin Role)</strong>을 보유한 사용자만 접근할 수 있습니다.
+    </p>
+    <div class="form-group" style="text-align: left;">
+      <label for="admin-auth-email">관리자 이메일</label>
+      <input type="email" id="admin-auth-email" placeholder="admin@example.com">
     </div>
-    <div class="stat-card">
-      <div class="label">활성 웹 푸시 구독자 수</div>
-      <div id="stat-subs" class="val" style="color: var(--success);">0</div>
+    <div class="form-group" style="text-align: left;">
+      <label for="admin-auth-pass">비밀번호</label>
+      <input type="password" id="admin-auth-pass" placeholder="비밀번호 입력">
     </div>
-    <div class="stat-card">
-      <div class="label">총 푸시 발송 성공 건수</div>
-      <div id="stat-sent" class="val" style="color: var(--warning);">0</div>
-    </div>
-    <div class="stat-card">
-      <div class="label">서버 Uptime 및 VAPID</div>
-      <div id="stat-uptime" class="val" style="font-size: 1.1rem; color: var(--text);">가동 중</div>
+    <button type="button" id="btn-do-admin-login" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
+      🔑 관리자로 로그인
+    </button>
+    <div style="margin-top: 14px;">
+      <a href="/" style="color: var(--primary); text-decoration: none; font-size: 0.85rem;">← 시간표 홈으로 돌아가기</a>
     </div>
   </div>
 
-  <div class="grid-2">
-    <!-- App Key Management Card -->
-    <div class="card">
-      <h2>🔑 App Key (테넌트) 관리 모듈</h2>
-      
-      <div style="margin-bottom: 16px; padding: 12px; background: #090d16; border-radius: 8px; border: 1px solid var(--border);">
-        <h3 style="font-size: 0.95rem; margin-bottom: 10px; color: var(--primary);">➕ 신규 App Key 발급</h3>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
-          <input type="text" id="admin-app-name" placeholder="서비스/앱 이름 (예: 원형시간표)">
-          <input type="text" id="admin-app-key" placeholder="커스텀 App Key (공백 시 자동생성)">
+  <!-- Admin Dashboard Container (Shown only to verified Admins) -->
+  <div id="admin-dashboard" style="display: none;">
+    <!-- Server System Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="label">등록된 App Key (테넌트)</div>
+        <div id="stat-apps" class="val">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">활성 웹 푸시 구독자 수</div>
+        <div id="stat-subs" class="val" style="color: var(--success);">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">총 푸시 발송 성공 건수</div>
+        <div id="stat-sent" class="val" style="color: var(--warning);">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">서버 Uptime 및 VAPID</div>
+        <div id="stat-uptime" class="val" style="font-size: 1.1rem; color: var(--text);">가동 중</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <!-- App Key Management Card -->
+      <div class="card">
+        <h2>🔑 App Key (테넌트) 관리 모듈</h2>
+        
+        <div style="margin-bottom: 16px; padding: 12px; background: #090d16; border-radius: 8px; border: 1px solid var(--border);">
+          <h3 style="font-size: 0.95rem; margin-bottom: 10px; color: var(--primary);">➕ 신규 App Key 발급</h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+            <input type="text" id="admin-app-name" placeholder="서비스/앱 이름 (예: 원형시간표)">
+            <input type="text" id="admin-app-key" placeholder="커스텀 App Key (공백 시 자동생성)">
+          </div>
+          <button type="button" id="btn-admin-create-app" class="btn btn-primary btn-sm" style="width: 100%;">
+            🔑 신규 App Key 및 Secret Key 발급
+          </button>
         </div>
-        <button type="button" id="btn-admin-create-app" class="btn btn-primary btn-sm" style="width: 100%;">
-          🔑 신규 App Key 및 Secret Key 발급
-        </button>
+
+        <div style="overflow-x: auto; max-height: 300px;">
+          <table>
+            <thead>
+              <tr>
+                <th>App Name</th>
+                <th>App Key</th>
+                <th>Created At</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="admin-apps-tbody">
+              <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">불러오는 중...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <div style="overflow-x: auto; max-height: 300px;">
+      <!-- Push Dispatch Admin Control -->
+      <div class="card">
+        <h2>🚀 Server Push Broadcaster (관리자 전송)</h2>
+        <div class="form-group">
+          <label for="admin-target-app">Target App Key</label>
+          <select id="admin-target-app">
+            <option value="demo-app-key-2026">Pushwing Demo App</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="admin-target-user">Target User ID (공백 시 전체 구독자 대상 전체 발송)</label>
+          <input type="text" id="admin-target-user" placeholder="예: user-demo-01 (공백 시 전체 발송)">
+        </div>
+
+        <div class="form-group">
+          <label for="admin-push-title">Push Title</label>
+          <input type="text" id="admin-push-title" value="📢 [서버 시스템 공지] Pushwing 알림">
+        </div>
+
+        <div class="form-group">
+          <label for="admin-push-body">Push Message Body</label>
+          <textarea id="admin-push-body" rows="2">서버 관리자 콘솔에서 발송된 브로드캐스트 푸시 알림입니다.</textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="admin-push-url">Landing Page URL</label>
+          <input type="text" id="admin-push-url" value="/client/index.html">
+        </div>
+
+        <button type="button" id="btn-admin-send-push" class="btn btn-success" style="width: 100%;">
+          🚀 서버 푸시 전송 실행
+        </button>
+      </div>
+    </div>
+
+    <!-- Admin Roles Management Card -->
+    <div class="card">
+      <h2>🛡️ Admin Roles (관리자 권한 부여 및 관리)</h2>
+      <div style="display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;">
+        <input type="email" id="input-grant-email" placeholder="관리자로 지정할 계정 이메일 (예: admin@example.com)" style="max-width: 380px;">
+        <button type="button" id="btn-grant-admin" class="btn btn-primary btn-sm">➕ 관리자 권한 부여</button>
+      </div>
+      <div style="overflow-x: auto; max-height: 250px;">
         <table>
           <thead>
             <tr>
-              <th>App Name</th>
-              <th>App Key</th>
-              <th>Created At</th>
-              <th>Action</th>
+              <th>이메일 (Email)</th>
+              <th>User ID</th>
+              <th>Role</th>
+              <th>지정 일시</th>
             </tr>
           </thead>
-          <tbody id="admin-apps-tbody">
+          <tbody id="admin-roles-tbody">
             <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">불러오는 중...</td></tr>
           </tbody>
         </table>
       </div>
     </div>
 
-    <!-- Push Dispatch Admin Control -->
+    <!-- Subscribers Table -->
     <div class="card">
-      <h2>🚀 Server Push Broadcaster (관리자 전송)</h2>
-      <div class="form-group">
-        <label for="admin-target-app">Target App Key</label>
-        <select id="admin-target-app">
-          <option value="demo-app-key-2026">Pushwing Demo App</option>
+      <h2>👥 App Active Subscriptions (웹 푸시 구독 목록)</h2>
+      <div style="display: flex; gap: 12px; margin-bottom: 14px; align-items: center;">
+        <label style="margin: 0; white-space: nowrap;">필터 App Key:</label>
+        <select id="filter-sub-app" style="max-width: 300px;">
+          <option value="">전체 App Key</option>
         </select>
+        <button type="button" id="btn-refresh-subs" class="btn btn-outline btn-sm">🔄 새로고침</button>
       </div>
 
-      <div class="form-group">
-        <label for="admin-target-user">Target User ID (공백 시 전체 구독자 대상 전체 발송)</label>
-        <input type="text" id="admin-target-user" placeholder="예: user-demo-01 (공백 시 전체 발송)">
+      <div style="overflow-x: auto; max-height: 350px;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>App Key</th>
+              <th>User ID</th>
+              <th>Browser User-Agent</th>
+              <th>Endpoint</th>
+              <th>Created At</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="admin-subs-tbody">
+            <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">구독 데이터가 없습니다.</td></tr>
+          </tbody>
+        </table>
       </div>
-
-      <div class="form-group">
-        <label for="admin-push-title">Push Title</label>
-        <input type="text" id="admin-push-title" value="📢 [서버 시스템 공지] Pushwing 알림">
-      </div>
-
-      <div class="form-group">
-        <label for="admin-push-body">Push Message Body</label>
-        <textarea id="admin-push-body" rows="2">서버 관리자 콘솔에서 발송된 브로드캐스트 푸시 알림입니다.</textarea>
-      </div>
-
-      <div class="form-group">
-        <label for="admin-push-url">Landing Page URL</label>
-        <input type="text" id="admin-push-url" value="/client/index.html">
-      </div>
-
-      <button type="button" id="btn-admin-send-push" class="btn btn-success" style="width: 100%;">
-        🚀 서버 푸시 전송 실행
-      </button>
-    </div>
-  </div>
-
-  <!-- Subscribers Table -->
-  <div class="card">
-    <h2>👥 App Active Subscriptions (웹 푸시 구독 목록)</h2>
-    <div style="display: flex; gap: 12px; margin-bottom: 14px; align-items: center;">
-      <label style="margin: 0; white-space: nowrap;">필터 App Key:</label>
-      <select id="filter-sub-app" style="max-width: 300px;">
-        <option value="">전체 App Key</option>
-      </select>
-      <button type="button" id="btn-refresh-subs" class="btn btn-outline btn-sm">🔄 새로고침</button>
     </div>
 
-    <div style="overflow-x: auto; max-height: 350px;">
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>App Key</th>
-            <th>User ID</th>
-            <th>Browser User-Agent</th>
-            <th>Endpoint</th>
-            <th>Created At</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody id="admin-subs-tbody">
-          <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">구독 데이터가 없습니다.</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Push Logs Table -->
-  <div class="card">
-    <h2>📊 Push Dispatch Logs (전송 이력 모니터링)</h2>
-    <div style="overflow-x: auto; max-height: 300px;">
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>App Key</th>
-            <th>Title</th>
-            <th>Body</th>
-            <th>Success</th>
-            <th>Fail</th>
-            <th>Sent At</th>
-          </tr>
-        </thead>
-        <tbody id="admin-logs-tbody">
-          <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">발송 기록이 없습니다.</td></tr>
-        </tbody>
-      </table>
+    <!-- Push Logs Table -->
+    <div class="card">
+      <h2>📊 Push Dispatch Logs (전송 이력 모니터링)</h2>
+      <div style="overflow-x: auto; max-height: 300px;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>App Key</th>
+              <th>Title</th>
+              <th>Body</th>
+              <th>Success</th>
+              <th>Fail</th>
+              <th>Sent At</th>
+            </tr>
+          </thead>
+          <tbody id="admin-logs-tbody">
+            <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">발송 기록이 없습니다.</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 

@@ -1,5 +1,17 @@
 document.addEventListener('DOMContentLoaded', async () => {
-  // Elements
+  let supabase = null;
+  let currentSession = null;
+
+  // UI Elements - Auth Gate
+  const adminAuthGate = document.getElementById('admin-auth-gate');
+  const adminDashboard = document.getElementById('admin-dashboard');
+  const adminUserInfo = document.getElementById('admin-user-info');
+  const btnAdminLogout = document.getElementById('btn-admin-logout');
+  const adminAuthEmail = document.getElementById('admin-auth-email');
+  const adminAuthPass = document.getElementById('admin-auth-pass');
+  const btnDoAdminLogin = document.getElementById('btn-do-admin-login');
+
+  // UI Elements - Dashboard
   const statApps = document.getElementById('stat-apps');
   const statSubs = document.getElementById('stat-subs');
   const statSent = document.getElementById('stat-sent');
@@ -22,30 +34,165 @@ document.addEventListener('DOMContentLoaded', async () => {
   const adminSubsTbody = document.getElementById('admin-subs-tbody');
   const adminLogsTbody = document.getElementById('admin-logs-tbody');
 
-  // 1. Fetch Stats
+  const inputGrantEmail = document.getElementById('input-grant-email');
+  const btnGrantAdmin = document.getElementById('btn-grant-admin');
+  const adminRolesTbody = document.getElementById('admin-roles-tbody');
+
+  // 1. Helper: Authorized Fetch Wrapper
+  async function fetchWithAuth(url, options = {}) {
+    const headers = options.headers || {};
+    if (currentSession && currentSession.access_token) {
+      headers['Authorization'] = `Bearer ${currentSession.access_token}`;
+    }
+    return fetch(url, { ...options, headers });
+  }
+
+  // 2. Initialize Supabase & Check Admin Status
+  async function initAuth() {
+    try {
+      const configRes = await fetch('/api/config');
+      const { supabaseUrl, supabaseAnonKey } = await configRes.json();
+
+      if (supabaseUrl && supabaseAnonKey) {
+        // Dynamically load Supabase SDK if not loaded
+        if (!window.supabase) {
+          const mod = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+          window.supabase = mod;
+        }
+        supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          await verifyAndSetSession(session);
+        } else {
+          showAuthGate(true);
+        }
+
+        supabase.auth.onAuthStateChange(async (event, session) => {
+          if (session) {
+            await verifyAndSetSession(session);
+          } else {
+            currentSession = null;
+            showAuthGate(true);
+          }
+        });
+      } else {
+        // Local SQLite mode without Supabase - allow local admin
+        currentSession = { access_token: 'local-token', user: { email: 'local-admin' } };
+        showAuthGate(false, '로컬 관리자 모드');
+        loadAllDashboardData();
+      }
+    } catch (err) {
+      console.error('Init Auth error:', err);
+      showAuthGate(true);
+    }
+  }
+
+  async function verifyAndSetSession(session) {
+    currentSession = session;
+    try {
+      const res = await fetchWithAuth('/api/v1/auth/check-admin');
+      const data = await res.json();
+      if (data.success && data.isAdmin) {
+        showAuthGate(false, session.user.email);
+        await loadAllDashboardData();
+      } else {
+        showAuthGate(true, null, '⚠️ 이 계정은 관리자 권한(Admin Role)이 없습니다. 관리자 계정으로 로그인해 주세요.');
+      }
+    } catch (err) {
+      showAuthGate(true, null, '인증 확인 중 오류가 발생했습니다: ' + err.message);
+    }
+  }
+
+  function showAuthGate(show, email = null, alertMsg = null) {
+    if (show) {
+      adminAuthGate.style.display = 'block';
+      adminDashboard.style.display = 'none';
+      btnAdminLogout.style.display = 'none';
+      adminUserInfo.textContent = '🔒 로그인 필요';
+      if (alertMsg) alert(alertMsg);
+    } else {
+      adminAuthGate.style.display = 'none';
+      adminDashboard.style.display = 'block';
+      btnAdminLogout.style.display = 'inline-block';
+      adminUserInfo.textContent = `👤 관리자: ${email || 'Admin'}`;
+    }
+  }
+
+  // 3. Login Button Event
+  btnDoAdminLogin.addEventListener('click', async () => {
+    const email = adminAuthEmail.value.trim();
+    const password = adminAuthPass.value.trim();
+    if (!email || !password) {
+      alert('이메일과 비밀번호를 모두 입력해 주세요.');
+      return;
+    }
+
+    btnDoAdminLogin.disabled = true;
+    btnDoAdminLogin.textContent = '로그인 중...';
+
+    try {
+      if (supabase) {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+          alert('로그인 실패: ' + error.message);
+        } else {
+          await verifyAndSetSession(data.session);
+        }
+      } else {
+        alert('Supabase 연결 정보가 없습니다.');
+      }
+    } catch (err) {
+      alert('로그인 처리 중 오류: ' + err.message);
+    } finally {
+      btnDoAdminLogin.disabled = false;
+      btnDoAdminLogin.textContent = '🔑 관리자로 로그인';
+    }
+  });
+
+  // Logout Button Event
+  btnAdminLogout.addEventListener('click', async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+    currentSession = null;
+    showAuthGate(true);
+  });
+
+  // 4. Load All Dashboard Data
+  async function loadAllDashboardData() {
+    await Promise.all([
+      loadStats(),
+      loadApps(),
+      loadSubscriptions(),
+      loadLogs(),
+      loadUserRoles()
+    ]);
+  }
+
+  // 5. Fetch Stats
   async function loadStats() {
     try {
-      const res = await fetch('/api/v1/admin/stats');
+      const res = await fetchWithAuth('/api/v1/admin/stats');
       const data = await res.json();
       if (data.success && data.stats) {
         statApps.textContent = data.stats.totalApps || 0;
         statSubs.textContent = data.stats.totalSubscriptions || 0;
         statSent.textContent = data.stats.totalSent || 0;
         const uptimeMin = Math.floor((data.stats.uptimeSeconds || 0) / 60);
-        statUptime.textContent = `${uptimeMin}분 가동 중 (Subject: ${data.stats.vapidSubject})`;
+        statUptime.textContent = `${uptimeMin}분 가동 중`;
       }
     } catch (err) {
       console.error('Error fetching stats:', err);
     }
   }
 
-  // 2. Fetch Apps List
+  // 6. Fetch Apps List
   async function loadApps() {
     try {
-      const res = await fetch('/api/v1/apps');
+      const res = await fetchWithAuth('/api/v1/apps');
       const data = await res.json();
       if (data.success && data.apps) {
-        // Populate Select Dropdowns
         const currentVal1 = adminTargetApp.value;
         const currentVal2 = filterSubApp.value;
 
@@ -67,29 +214,36 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (currentVal1) adminTargetApp.value = currentVal1;
         if (currentVal2) filterSubApp.value = currentVal2;
 
-        // Render Apps Table
+        adminAppsTbody.innerHTML = '';
         if (data.apps.length === 0) {
-          adminAppsTbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">등록된 앱이 없습니다.</td></tr>';
+          adminAppsTbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--text-muted);">등록된 앱이 없습니다.</td></tr>';
           return;
         }
 
-        adminAppsTbody.innerHTML = data.apps.map(app => `
-          <tr>
-            <td><strong>${escapeHtml(app.app_name)}</strong></td>
-            <td><code>${escapeHtml(app.app_key)}</code></td>
-            <td>${new Date(app.created_at).toLocaleDateString()}</td>
+        data.apps.forEach(app => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><strong>${app.app_name}</strong></td>
+            <td><code>${app.app_key}</code></td>
+            <td style="color: var(--text-muted); font-size: 0.8rem;">${new Date(app.created_at).toLocaleString()}</td>
             <td>
-              <button class="btn btn-danger btn-sm btn-delete-app" data-key="${escapeHtml(app.app_key)}">삭제</button>
+              <button class="btn btn-danger btn-sm btn-del-app" data-key="${app.app_key}">삭제</button>
             </td>
-          </tr>
-        `).join('');
+          `;
+          adminAppsTbody.appendChild(tr);
+        });
 
-        // Attach delete event handlers
-        document.querySelectorAll('.btn-delete-app').forEach(btn => {
+        document.querySelectorAll('.btn-del-app').forEach(btn => {
           btn.addEventListener('click', async (e) => {
-            const appKey = e.target.getAttribute('data-key');
-            if (confirm(`정말로 AppKey [${appKey}] 및 관련 모든 구독 정보를 삭제하시겠습니까?`)) {
-              await deleteApp(appKey);
+            const key = e.target.dataset.key;
+            if (!confirm(`'${key}' 앱과 관련된 모든 구독 및 데이터를 삭제하시겠습니까?`)) return;
+            const delRes = await fetchWithAuth(`/api/v1/apps/${key}`, { method: 'DELETE' });
+            const delData = await delRes.json();
+            if (delData.success) {
+              alert('삭제되었습니다.');
+              loadAllDashboardData();
+            } else {
+              alert('삭제 실패: ' + delData.error);
             }
           });
         });
@@ -99,183 +253,222 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Delete App Function
-  async function deleteApp(appKey) {
-    try {
-      const res = await fetch(`/api/v1/apps/${encodeURIComponent(appKey)}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) {
-        alert(`AppKey [${appKey}] 삭제 완료.`);
-        await refreshAll();
-      } else {
-        alert('삭제 실패: ' + data.error);
-      }
-    } catch (err) {
-      alert('오류 발생: ' + err.message);
-    }
-  }
-
-  // 3. Create App Key Handler
+  // 7. Create App Key
   btnAdminCreateApp.addEventListener('click', async () => {
-    const name = adminAppName.value.trim();
-    const key = adminAppKey.value.trim();
-    if (!name) return alert('앱 이름을 입력하세요.');
+    const appName = adminAppName.value.trim();
+    const appKey = adminAppKey.value.trim();
+
+    if (!appName) {
+      alert('앱 이름을 입력하세요.');
+      return;
+    }
 
     try {
-      const res = await fetch('/api/v1/apps', {
+      const res = await fetchWithAuth('/api/v1/apps', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ app_name: name, app_key: key || undefined })
+        body: JSON.stringify({ app_name: appName, app_key: appKey || null })
       });
       const data = await res.json();
       if (data.success) {
-        alert(`🔑 신규 App Key [${data.app.app_name}] 생성 완료!\nAppKey: ${data.app.app_key}\nSecretKey: ${data.app.secret_key}`);
+        alert(`🎉 신규 App Key 발급 완료!\n\nApp Key: ${data.app.app_key}\nSecret Key: ${data.app.secret_key}`);
         adminAppName.value = '';
         adminAppKey.value = '';
-        await refreshAll();
+        loadAllDashboardData();
       } else {
-        alert('생성 실패: ' + data.error);
+        alert('발급 실패: ' + data.error);
       }
     } catch (err) {
       alert('오류 발생: ' + err.message);
     }
   });
 
-  // 4. Fetch Subscriptions
-  async function loadSubscriptions() {
-    const selectedApp = filterSubApp.value || adminTargetApp.value || 'demo-app-key-2026';
+  // 8. Push Broadcaster
+  btnAdminSendPush.addEventListener('click', async () => {
+    const appKey = adminTargetApp.value;
+    const userId = adminTargetUser.value.trim();
+    const title = adminPushTitle.value.trim();
+    const body = adminPushBody.value.trim();
+    const url = adminPushUrl.value.trim();
+
+    if (!appKey || !title || !body) {
+      alert('타겟 앱, 제목, 메시지 본문은 필수 입력 사항입니다.');
+      return;
+    }
+
+    btnAdminSendPush.disabled = true;
+    btnAdminSendPush.textContent = '🚀 발송 중...';
+
     try {
-      const res = await fetch(`/api/v1/subscriptions?app_key=${encodeURIComponent(selectedApp)}`);
+      const res = await fetchWithAuth('/api/v1/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          app_key: appKey,
+          user_id: userId || null,
+          title,
+          body,
+          url: url || '/'
+        })
+      });
+
       const data = await res.json();
-      if (data.success && data.subscriptions) {
-        if (data.subscriptions.length === 0) {
-          adminSubsTbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">등록된 구독 정보가 없습니다.</td></tr>';
-          return;
-        }
+      if (data.success) {
+        alert(`📢 푸시 발송 완료!\n\n총 대상자: ${data.totalTargeted || 0}명\n성공: ${data.deliveredCount || 0}건\n실패: ${data.failCount || 0}건\n정리된 만료 구독: ${data.prunedCount || 0}건`);
+        loadStats();
+        loadLogs();
+        loadSubscriptions();
+      } else {
+        alert('발송 실패: ' + data.error);
+      }
+    } catch (err) {
+      alert('발송 통신 오류: ' + err.message);
+    } finally {
+      btnAdminSendPush.disabled = false;
+      btnAdminSendPush.textContent = '🚀 서버 푸시 전송 실행';
+    }
+  });
 
-        adminSubsTbody.innerHTML = data.subscriptions.map(sub => {
-          const endpointSnippet = sub.endpoint ? sub.endpoint.substring(0, 35) + '...' : 'N/A';
-          const uaSnippet = sub.user_agent ? (sub.user_agent.includes('Chrome') ? 'Chrome' : (sub.user_agent.includes('Safari') ? 'Safari' : 'Browser')) : 'Browser';
-          return `
-            <tr>
-              <td>#${sub.id}</td>
-              <td><code>${escapeHtml(sub.app_key)}</code></td>
-              <td><strong>${escapeHtml(sub.user_id)}</strong></td>
-              <td><span class="badge">${uaSnippet}</span></td>
-              <td title="${escapeHtml(sub.endpoint)}"><code>${escapeHtml(endpointSnippet)}</code></td>
-              <td>${new Date(sub.created_at).toLocaleString()}</td>
-              <td>
-                <button class="btn btn-danger btn-sm btn-delete-sub" data-id="${sub.id}">삭제</button>
-              </td>
-            </tr>
+  // 9. Load Subscriptions
+  async function loadSubscriptions() {
+    const selectedApp = filterSubApp.value;
+    let url = '/api/v1/subscriptions';
+    if (selectedApp) {
+      url += `?app_key=${encodeURIComponent(selectedApp)}`;
+    } else if (adminTargetApp.value) {
+      url += `?app_key=${encodeURIComponent(adminTargetApp.value)}`;
+    } else {
+      adminSubsTbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color: var(--text-muted);">조회할 App Key를 선택하세요.</td></tr>';
+      return;
+    }
+
+    try {
+      const res = await fetchWithAuth(url);
+      const data = await res.json();
+      adminSubsTbody.innerHTML = '';
+
+      if (data.success && data.subscriptions && data.subscriptions.length > 0) {
+        data.subscriptions.forEach(sub => {
+          const tr = document.createElement('tr');
+          const shortEndpoint = sub.endpoint.substring(0, 30) + '...';
+          tr.innerHTML = `
+            <td>${sub.id}</td>
+            <td><code>${sub.app_key}</code></td>
+            <td><strong>${sub.user_id}</strong></td>
+            <td style="font-size:0.75rem; color: var(--text-muted);">${sub.user_agent ? sub.user_agent.substring(0, 45) + '...' : '-'}</td>
+            <td><code title="${sub.endpoint}">${shortEndpoint}</code></td>
+            <td style="font-size:0.8rem; color: var(--text-muted);">${new Date(sub.created_at).toLocaleString()}</td>
+            <td>
+              <button class="btn btn-danger btn-sm btn-del-sub" data-id="${sub.id}">해제</button>
+            </td>
           `;
-        }).join('');
+          adminSubsTbody.appendChild(tr);
+        });
 
-        document.querySelectorAll('.btn-delete-sub').forEach(btn => {
+        document.querySelectorAll('.btn-del-sub').forEach(btn => {
           btn.addEventListener('click', async (e) => {
-            const subId = e.target.getAttribute('data-id');
-            if (confirm(`구독 #${subId}를 삭제하시겠습니까?`)) {
-              await deleteSubscription(subId);
+            const id = e.target.dataset.id;
+            if (!confirm(`구독 ID #${id}을 삭제하시겠습니까?`)) return;
+            const delRes = await fetchWithAuth(`/api/v1/subscriptions/${id}`, { method: 'DELETE' });
+            const delData = await delRes.json();
+            if (delData.success) {
+              loadSubscriptions();
+              loadStats();
             }
           });
         });
-      }
-    } catch (err) {
-      console.error('Error fetching subscriptions:', err);
-    }
-  }
-
-  async function deleteSubscription(subId) {
-    try {
-      const res = await fetch(`/api/v1/subscriptions/${subId}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) {
-        await refreshAll();
-      }
-    } catch (err) {
-      alert('구독 삭제 중 오류 발생: ' + err.message);
-    }
-  }
-
-  // 5. Send Broadcast Push Handler
-  btnAdminSendPush.addEventListener('click', async () => {
-    btnAdminSendPush.disabled = true;
-    try {
-      const payload = {
-        app_key: adminTargetApp.value,
-        user_id: adminTargetUser.value.trim() || undefined,
-        title: adminPushTitle.value.trim(),
-        body: adminPushBody.value.trim(),
-        url: adminPushUrl.value.trim()
-      };
-
-      const res = await fetch('/api/v1/push', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        alert(`🚀 서버 푸시 전송 완료!\n성공: ${data.deliveredCount}건, 실패: ${data.failCount}건, 만료 정제: ${data.prunedCount || 0}건`);
-        await refreshAll();
       } else {
-        alert('전송 실패: ' + data.error);
+        adminSubsTbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color: var(--text-muted);">활성 구독자가 없습니다.</td></tr>';
       }
     } catch (err) {
-      alert('오류 발생: ' + err.message);
-    } finally {
-      btnAdminSendPush.disabled = false;
+      console.error('Error fetching subs:', err);
     }
-  });
+  }
 
-  // 6. Fetch Push Logs
+  filterSubApp.addEventListener('change', loadSubscriptions);
+  btnRefreshSubs.addEventListener('click', loadSubscriptions);
+
+  // 10. Load Push Logs
   async function loadLogs() {
-    const selectedAppKey = filterSubApp.value || adminTargetApp.value;
     try {
-      const res = await fetch(`/api/v1/logs?app_key=${encodeURIComponent(selectedAppKey)}`);
+      const res = await fetchWithAuth('/api/v1/logs');
       const data = await res.json();
-      if (data.success && data.logs) {
-        if (data.logs.length === 0) {
-          adminLogsTbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">발송 기록이 없습니다.</td></tr>';
-          return;
-        }
+      adminLogsTbody.innerHTML = '';
 
-        adminLogsTbody.innerHTML = data.logs.map(log => `
-          <tr>
+      if (data.success && data.logs && data.logs.length > 0) {
+        data.logs.forEach(log => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
             <td>#${log.id}</td>
-            <td><code>${escapeHtml(log.app_key)}</code></td>
-            <td><strong>${escapeHtml(log.title)}</strong></td>
-            <td>${escapeHtml(log.body)}</td>
-            <td style="color: var(--success); font-weight: bold;">${log.success_count}</td>
-            <td style="color: var(--danger); font-weight: bold;">${log.fail_count}</td>
-            <td>${new Date(log.sent_at).toLocaleString()}</td>
-          </tr>
-        `).join('');
+            <td><code>${log.app_key}</code></td>
+            <td><strong>${log.title}</strong></td>
+            <td style="font-size:0.8rem;">${log.body}</td>
+            <td style="color:var(--success); font-weight:bold;">${log.success_count}</td>
+            <td style="color:var(--danger);">${log.fail_count}</td>
+            <td style="font-size:0.8rem; color: var(--text-muted);">${new Date(log.sent_at).toLocaleString()}</td>
+          `;
+          adminLogsTbody.appendChild(tr);
+        });
+      } else {
+        adminLogsTbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color: var(--text-muted);">발송 기록이 없습니다.</td></tr>';
       }
     } catch (err) {
       console.error('Error fetching logs:', err);
     }
   }
 
-  function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  // 11. Load Admin Roles & Grant Admin
+  async function loadUserRoles() {
+    try {
+      const res = await fetchWithAuth('/api/v1/admin/users');
+      const data = await res.json();
+      adminRolesTbody.innerHTML = '';
+
+      if (data.success && data.users && data.users.length > 0) {
+        data.users.forEach(u => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><strong>${u.email}</strong></td>
+            <td style="font-size:0.8rem; color: var(--text-muted);">${u.user_id || '-'}</td>
+            <td><span class="badge" style="background:#10b98120; color:var(--success); border-color:var(--success);">${u.role}</span></td>
+            <td style="font-size:0.8rem; color: var(--text-muted);">${u.created_at ? new Date(u.created_at).toLocaleString() : '-'}</td>
+          `;
+          adminRolesTbody.appendChild(tr);
+        });
+      } else {
+        adminRolesTbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--text-muted);">지정된 관리자 계정이 없습니다.</td></tr>';
+      }
+    } catch (err) {
+      console.error('Error fetching roles:', err);
+    }
   }
 
-  async function refreshAll() {
-    await loadStats();
-    await loadApps();
-    await loadSubscriptions();
-    await loadLogs();
-  }
+  btnGrantAdmin.addEventListener('click', async () => {
+    const email = inputGrantEmail.value.trim();
+    if (!email) {
+      alert('관리자로 지정할 계정 이메일을 입력하세요.');
+      return;
+    }
 
-  filterSubApp.addEventListener('change', async () => {
-    await loadSubscriptions();
-    await loadLogs();
+    try {
+      const res = await fetchWithAuth('/api/v1/admin/grant-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message || '관리자 권한이 부여되었습니다.');
+        inputGrantEmail.value = '';
+        loadUserRoles();
+      } else {
+        alert('권한 부여 실패: ' + data.error);
+      }
+    } catch (err) {
+      alert('권한 부여 통신 오류: ' + err.message);
+    }
   });
-  btnRefreshSubs.addEventListener('click', refreshAll);
 
-  // Initial Load
-  await refreshAll();
+  // Start initialization
+  await initAuth();
 });
