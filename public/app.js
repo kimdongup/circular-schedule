@@ -109,15 +109,9 @@ function timeStrToDec(str) {
 const MINUTE_STEP = 10;
 const TIME_MIN = START_HOUR * 60;
 const TIME_MAX = (START_HOUR + TOTAL_HOURS) * 60;
-const DURATION_PRESETS = [30, 60, 90, 120, 180];
 
 let startMinutes = 10 * 60;
 let endMinutes = 11 * 60 + 30;
-
-function clampTime(mins) {
-  const snapped = Math.round(mins / MINUTE_STEP) * MINUTE_STEP;
-  return Math.max(TIME_MIN, Math.min(TIME_MAX, snapped));
-}
 
 function minsToDec(mins) {
   return mins / 60;
@@ -131,126 +125,90 @@ function formatDuration(mins) {
   return `${m}분`;
 }
 
-function setTimeRange(startDec, endDec, { preserveDuration } = {}) {
-  const nextStart = clampTime(Math.round(Number(startDec) * 60));
-  let nextEnd = clampTime(Math.round(Number(endDec) * 60));
-  if (preserveDuration) {
-    const duration = Math.max(MINUTE_STEP, endMinutes - startMinutes);
-    nextEnd = clampTime(nextStart + duration);
+function ensureOptionExists(selectEl, mins) {
+  const strVal = String(mins);
+  for (let i = 0; i < selectEl.options.length; i += 1) {
+    if (selectEl.options[i].value === strVal) return;
   }
-  if (nextStart >= TIME_MAX) {
-    startMinutes = TIME_MAX - MINUTE_STEP;
-    endMinutes = TIME_MAX;
-  } else {
-    startMinutes = nextStart;
-    endMinutes = nextEnd <= startMinutes ? Math.min(TIME_MAX, startMinutes + 60) : nextEnd;
-    if (endMinutes <= startMinutes) endMinutes = Math.min(TIME_MAX, startMinutes + MINUTE_STEP);
+  const opt = document.createElement("option");
+  opt.value = strVal;
+  opt.textContent = decToTimeStr(mins / 60);
+  let inserted = false;
+  for (let i = 0; i < selectEl.options.length; i += 1) {
+    if (Number(selectEl.options[i].value) > mins) {
+      selectEl.insertBefore(opt, selectEl.options[i]);
+      inserted = true;
+      break;
+    }
   }
-  syncTimePickers();
+  if (!inserted) selectEl.appendChild(opt);
 }
 
-function nudgeTime(target, delta) {
-  if (target === "start") setTimeRange(minsToDec(startMinutes + delta), minsToDec(endMinutes), { preserveDuration: true });
-  else setTimeRange(minsToDec(startMinutes), minsToDec(endMinutes + delta));
-}
+function syncTimeDropdowns() {
+  const startSel = $("select-start");
+  const endSel = $("select-end");
+  if (!startSel || !endSel) return;
 
-function pickHour(target, hour) {
-  const current = target === "start" ? startMinutes : endMinutes;
-  const minutes = current % 60;
-  let next = hour * 60 + minutes;
-  if (target === "start") {
-    setTimeRange(minsToDec(next), minsToDec(endMinutes));
-    return;
-  }
-  if (next <= startMinutes) {
-    const firstValid = startMinutes + MINUTE_STEP;
-    next = Math.floor(firstValid / 60) === hour ? firstValid : hour * 60 + minutes;
-  }
-  setTimeRange(minsToDec(startMinutes), minsToDec(next));
-}
+  ensureOptionExists(startSel, startMinutes);
+  ensureOptionExists(endSel, endMinutes);
 
-function pickMinute(target, minute) {
-  const current = target === "start" ? startMinutes : endMinutes;
-  const hour = Math.floor(current / 60);
-  const next = hour * 60 + minute;
-  if (target === "start") setTimeRange(minsToDec(next), minsToDec(endMinutes));
-  else setTimeRange(minsToDec(startMinutes), minsToDec(next));
-}
+  startSel.value = String(startMinutes);
+  endSel.value = String(endMinutes);
 
-function applyDuration(mins) {
-  setTimeRange(minsToDec(startMinutes), minsToDec(startMinutes + mins));
-}
-
-function chipButton(className, label, extra = {}) {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = className;
-  btn.textContent = label;
-  Object.entries(extra).forEach(([key, value]) => {
-    if (key === "disabled") btn.disabled = Boolean(value);
-    else btn.dataset[key] = String(value);
-  });
-  return btn;
-}
-
-function renderHourChips(hostId, selectedHour, isStart) {
-  const host = $(hostId);
-  host.innerHTML = "";
-  const lastHour = isStart ? START_HOUR + TOTAL_HOURS - 1 : START_HOUR + TOTAL_HOURS;
-  for (let hour = START_HOUR; hour <= lastHour; hour += 1) {
-    const btn = chipButton("hour-chip", `${hour}시`, { hour });
-    btn.classList.toggle("active", hour === selectedHour);
-    btn.addEventListener("click", () => pickHour(isStart ? "start" : "end", hour));
-    host.appendChild(btn);
-  }
-}
-
-function renderMinuteChips(hostId, selectedHour, selectedMinute, isStart) {
-  const host = $(hostId);
-  host.innerHTML = "";
-  for (let minute = 0; minute < 60; minute += MINUTE_STEP) {
-    const total = selectedHour * 60 + minute;
-    const invalid = isStart ? total >= TIME_MAX : total <= startMinutes || total > TIME_MAX;
-    const btn = chipButton("minute-chip", String(minute).padStart(2, "0"), { minute, disabled: invalid });
-    btn.classList.toggle("active", !invalid && minute === selectedMinute);
-    btn.addEventListener("click", () => pickMinute(isStart ? "start" : "end", minute));
-    host.appendChild(btn);
-  }
-}
-
-function syncTimePickers() {
-  const startH = Math.floor(startMinutes / 60);
-  const startM = startMinutes % 60;
-  const endH = Math.floor(endMinutes / 60);
-  const endM = endMinutes % 60;
   const duration = endMinutes - startMinutes;
-
-  $("start-readout").textContent = decToTimeStr(minsToDec(startMinutes));
-  $("end-readout").textContent = decToTimeStr(minsToDec(endMinutes));
-  $("time-duration").textContent = duration > 0 ? formatDuration(duration) : "시간을 확인하세요";
-
-  renderHourChips("start-hours", startH, true);
-  renderHourChips("end-hours", endH, false);
-  renderMinuteChips("start-minutes", startH, startM, true);
-  renderMinuteChips("end-minutes", endH, endM, false);
-
-  document.querySelectorAll(".duration-chip").forEach((btn) => {
-    btn.classList.toggle("active", Number(btn.dataset.duration) === duration);
-  });
+  const durationEl = $("time-duration");
+  if (durationEl) {
+    durationEl.textContent = duration > 0 ? formatDuration(duration) : "시간 확인 필요";
+  }
 }
 
-function setupTimePickers() {
-  const host = $("duration-chips");
-  host.innerHTML = "";
-  DURATION_PRESETS.forEach((mins) => {
-    const btn = chipButton("duration-chip", formatDuration(mins), { duration: mins });
-    btn.addEventListener("click", () => applyDuration(mins));
-    host.appendChild(btn);
+function setTimeRange(startDec, endDec) {
+  startMinutes = Math.max(TIME_MIN, Math.min(TIME_MAX, Math.round(Number(startDec) * 60)));
+  endMinutes = Math.max(TIME_MIN, Math.min(TIME_MAX, Math.round(Number(endDec) * 60)));
+  if (startMinutes >= endMinutes) {
+    endMinutes = Math.min(TIME_MAX, startMinutes + 60 <= TIME_MAX ? startMinutes + 60 : startMinutes + MINUTE_STEP);
+  }
+  syncTimeDropdowns();
+}
+
+function setupTimeDropdowns() {
+  const startSel = $("select-start");
+  const endSel = $("select-end");
+  if (!startSel || !endSel) return;
+
+  startSel.innerHTML = "";
+  endSel.innerHTML = "";
+
+  for (let mins = TIME_MIN; mins <= TIME_MAX; mins += MINUTE_STEP) {
+    const timeStr = decToTimeStr(mins / 60);
+    const optStart = document.createElement("option");
+    optStart.value = String(mins);
+    optStart.textContent = timeStr;
+    startSel.appendChild(optStart);
+
+    const optEnd = document.createElement("option");
+    optEnd.value = String(mins);
+    optEnd.textContent = timeStr;
+    endSel.appendChild(optEnd);
+  }
+
+  startSel.addEventListener("change", (event) => {
+    startMinutes = Number(event.target.value);
+    if (endMinutes <= startMinutes) {
+      endMinutes = Math.min(TIME_MAX, startMinutes + 60 <= TIME_MAX ? startMinutes + 60 : startMinutes + MINUTE_STEP);
+    }
+    syncTimeDropdowns();
   });
-  document.querySelectorAll(".time-step").forEach((btn) => {
-    btn.addEventListener("click", () => nudgeTime(btn.dataset.target, Number(btn.dataset.delta)));
+
+  endSel.addEventListener("change", (event) => {
+    endMinutes = Number(event.target.value);
+    if (startMinutes >= endMinutes) {
+      startMinutes = Math.max(TIME_MIN, endMinutes - 60 >= TIME_MIN ? endMinutes - 60 : endMinutes - MINUTE_STEP);
+    }
+    syncTimeDropdowns();
   });
-  syncTimePickers();
+
+  syncTimeDropdowns();
 }
 
 function normalizeItem(item, idx) {
@@ -741,7 +699,35 @@ function setupColorSwatches() {
   updateSwatchState();
 }
 
+let isListExpanded = false;
+
+function setListExpanded(expanded) {
+  isListExpanded = Boolean(expanded);
+  const listUi = $("schedule-list-ui");
+  const toggleBtn = $("activity-list-toggle");
+  const icon = $("activity-list-icon");
+  const card = $("activity-list-card");
+
+  if (listUi) listUi.style.display = isListExpanded ? "flex" : "none";
+  if (toggleBtn) toggleBtn.setAttribute("aria-expanded", String(isListExpanded));
+  if (icon) icon.textContent = isListExpanded ? "▲ 접기" : "▼ 펼치기";
+  if (card) card.classList.toggle("expanded", isListExpanded);
+}
+
 function setupEvents() {
+  const listToggle = $("activity-list-toggle");
+  if (listToggle) {
+    listToggle.addEventListener("click", () => {
+      setListExpanded(!isListExpanded);
+    });
+    listToggle.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        setListExpanded(!isListExpanded);
+      }
+    });
+  }
+
   document.querySelectorAll(".day-chip").forEach((btn) => {
     btn.addEventListener("click", () => {
       btn.classList.toggle("active");
@@ -764,6 +750,7 @@ function setupEvents() {
       $("input-title").value = "";
       $("input-title").focus();
     }
+    setListExpanded(true);
     refresh();
     if (selectedItemId) {
       const current = items.find((it) => it.id === selectedItemId);
@@ -777,14 +764,42 @@ function setupEvents() {
   $("btn-download-png").addEventListener("click", () => {
     downloadAsPNG();
   });
-  $("btn-clear-all").addEventListener("click", () => {
-    if (!items.length) return;
-    if (!confirm("등록된 활동을 모두 삭제할까요?")) return;
+
+  $("btn-clear-schedule").addEventListener("click", () => {
+    if (!items.length) {
+      alert("이미 시간표가 비어 있습니다.");
+      return;
+    }
+    if (!confirm("현재 시간표의 모든 활동을 삭제하고 비우시겠습니까?")) return;
     items = [];
     selectedItemId = null;
     $("detail-card").style.display = "none";
     setEditMode(null);
     refresh();
+  });
+
+  $("btn-delete-cloud-schedule").addEventListener("click", async () => {
+    if (!supabase || !currentUser) return;
+    const sel = $("cloud-schedule-select");
+    const selectedId = sel.value;
+    if (!selectedId) {
+      alert("삭제할 클라우드 시간표를 먼저 선택해주세요.");
+      return;
+    }
+    const selectedTitle = sel.options[sel.selectedIndex]?.textContent || "선택한 시간표";
+    if (!confirm(`'${selectedTitle}' 시간표를 클라우드에서 정말 삭제하시겠습니까?`)) return;
+
+    const { error } = await supabase.from("schedules").delete().eq("id", selectedId).eq("user_id", currentUser.id);
+    if (error) {
+      alert("클라우드 시간표 삭제 실패: " + error.message);
+      return;
+    }
+    alert("클라우드 시간표가 삭제되었습니다.");
+    if (currentScheduleId === selectedId) {
+      currentScheduleId = null;
+      window.history.pushState(null, "", "/");
+    }
+    await loadUserSchedules();
   });
 
   $("input-color").addEventListener("input", (event) => {
@@ -904,6 +919,8 @@ function handleUserLogout() {
   $("btn-logout").style.display = "none";
   $("btn-cloud-save").style.display = "none";
   $("cloud-schedules-bar").style.display = "none";
+  const delBtn = $("btn-delete-cloud-schedule");
+  if (delBtn) delBtn.style.display = "none";
 }
 
 async function loadUserSchedules() {
@@ -916,22 +933,28 @@ async function loadUserSchedules() {
 
   if (data && !error) {
     const sel = $("cloud-schedule-select");
+    const delBtn = $("btn-delete-cloud-schedule");
     sel.innerHTML = `<option value="">-- 내 클라우드 시간표 불러오기 (${data.length}개) --</option>`;
     data.forEach((row) => {
       const opt = document.createElement("option");
       opt.value = row.id;
       opt.textContent = row.title;
+      if (currentScheduleId === row.id) opt.selected = true;
       sel.appendChild(opt);
     });
+    if (delBtn) {
+      delBtn.style.display = sel.value ? "inline-block" : "none";
+    }
     sel.onchange = (event) => {
       const id = event.target.value;
+      if (delBtn) delBtn.style.display = id ? "inline-block" : "none";
       if (id) window.location.href = `/s/${id}`;
     };
   }
 }
 
 async function init() {
-  setupTimePickers();
+  setupTimeDropdowns();
   setupColorSwatches();
   setupEvents();
   loadLocalSchedule();

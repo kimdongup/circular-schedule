@@ -21,9 +21,12 @@
       </div>
     </div>
     <div id="cloud-schedules-bar" style="display:none; margin-top:10px;">
-      <select id="cloud-schedule-select" class="form-control">
-        <option value="">-- 내 클라우드 시간표 불러오기 --</option>
-      </select>
+      <div class="cloud-bar-row">
+        <select id="cloud-schedule-select" class="form-control">
+          <option value="">-- 내 클라우드 시간표 불러오기 --</option>
+        </select>
+        <button type="button" id="btn-delete-cloud-schedule" class="btn btn-sm btn-danger" style="display:none;">선택 시간표 삭제</button>
+      </div>
     </div>
   </header>
 
@@ -50,6 +53,7 @@
       <button type="button" id="btn-download-png" class="btn btn-outline">💾 이미지 저장(PNG)</button>
       <button type="button" id="btn-share" class="btn btn-secondary">🔗 공유 링크 생성</button>
       <button type="button" id="btn-cloud-save" class="btn btn-success" style="display:none;">☁️ 클라우드 저장</button>
+      <button type="button" id="btn-clear-schedule" class="btn btn-outline-danger">🗑️ 시간표 비우기</button>
     </div>
   </div>
 
@@ -63,37 +67,18 @@
         </div>
 
         <div class="form-group full">
-          <label>시간 (9시 ~ 21시, 10분 단위)</label>
-          <div class="time-range">
-            <section class="time-picker" aria-labelledby="start-kicker">
-              <div class="time-picker-head">
-                <strong id="start-kicker">시작</strong>
-                <span class="time-readout" id="start-readout">10:00</span>
-              </div>
-              <div class="hour-chips" id="start-hours" role="group" aria-label="시작 시"></div>
-              <div class="minute-chips" id="start-minutes" role="group" aria-label="시작 분"></div>
-              <div class="time-steps">
-                <button type="button" class="time-step" data-target="start" data-delta="-10">−10분</button>
-                <button type="button" class="time-step" data-target="start" data-delta="10">+10분</button>
-              </div>
-            </section>
-
-            <section class="time-picker" aria-labelledby="end-kicker">
-              <div class="time-picker-head">
-                <strong id="end-kicker">종료</strong>
-                <span class="time-readout" id="end-readout">11:30</span>
-              </div>
-              <div class="hour-chips" id="end-hours" role="group" aria-label="종료 시"></div>
-              <div class="minute-chips" id="end-minutes" role="group" aria-label="종료 분"></div>
-              <div class="time-steps">
-                <button type="button" class="time-step" data-target="end" data-delta="-10">−10분</button>
-                <button type="button" class="time-step" data-target="end" data-delta="10">+10분</button>
-              </div>
-            </section>
-          </div>
-          <div class="time-meta">
-            <span id="time-duration">1시간 30분</span>
-            <div class="duration-chips" id="duration-chips" role="group" aria-label="활동 길이"></div>
+          <label>시작 시각 ~ 종료 시각 (9시 ~ 21시)</label>
+          <div class="time-dropdown-row">
+            <div class="time-select-group">
+              <span class="time-label-prefix">시작</span>
+              <select id="select-start" class="form-control time-select" aria-label="시작 시각" required></select>
+            </div>
+            <span class="time-separator">~</span>
+            <div class="time-select-group">
+              <span class="time-label-prefix">종료</span>
+              <select id="select-end" class="form-control time-select" aria-label="종료 시각" required></select>
+            </div>
+            <span id="time-duration" class="time-duration-badge">1시간 30분</span>
           </div>
         </div>
 
@@ -128,12 +113,12 @@
     </form>
   </div>
 
-  <div class="card">
-    <div class="list-header">
-      <span>📋 등록된 활동 목록 (<span id="count-badge">0</span>개)</span>
-      <button type="button" id="btn-clear-all" class="btn btn-sm btn-outline">전체 삭제</button>
+  <div class="card collapsible-card" id="activity-list-card">
+    <div class="list-header clickable-header" id="activity-list-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="schedule-list-ui">
+      <span class="list-title">📋 등록된 활동 목록 (<span id="count-badge">0</span>개)</span>
+      <span class="toggle-badge" id="activity-list-icon">▼ 펼치기</span>
     </div>
-    <ul id="schedule-list-ui" class="schedule-list"></ul>
+    <ul id="schedule-list-ui" class="schedule-list" style="display: none;"></ul>
   </div>
 </div>
 
