@@ -20,10 +20,16 @@
       <span>원형 시간표 관리 허브 <span style="font-size:0.85rem; opacity:0.85; font-weight:400;">(Schedule Hub)</span></span>
     </div>
   </div>
+
+  <!-- Realtime Push Notification Ticker in Top Blue Bar -->
+  <div id="header-push-banner" class="g-header-push-banner" style="display:none;">
+    <span class="pulse-dot"></span>
+    <span id="header-push-text">🔔 새 알림이 도착했습니다.</span>
+    <button type="button" id="btn-close-header-push" class="header-push-close" aria-label="닫기">✕</button>
+  </div>
   
   <div class="g-header-right">
     <span class="g-version">Version 2.4.0</span>
-    <button type="button" id="btn-open-push-modal" class="btn btn-sm btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.4);">🔔 푸시 알림</button>
     <a href="/server-admin" id="btn-admin-panel-link" target="_blank" class="btn btn-sm btn-outline" style="text-decoration:none; display:none; color:#fff; border-color:rgba(255,255,255,0.4);">⚙️ 관리자</a>
     <button type="button" id="btn-login-modal" class="btn btn-sm btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.4);">로그인</button>
     <button type="button" id="btn-logout" class="btn btn-sm btn-outline" style="display:none; color:#fff; border-color:rgba(255,255,255,0.4);">로그아웃</button>
@@ -33,7 +39,7 @@
 
 <!-- 2. Main Layout (Sidebar + Content) -->
 <div class="g-layout">
-  <!-- Sidebar Navigation -->
+  <!-- Sidebar Navigation with Smooth Collapse -->
   <aside class="g-sidebar" id="g-sidebar">
     <div class="g-sidebar-section-title">Navigation</div>
     <button type="button" class="g-sidebar-item active" id="nav-dashboard">
@@ -85,21 +91,19 @@
 
         <div class="g-action-right">
           <div class="g-pill-counter" id="stat-pill-actions">Actions: 0</div>
-          <div class="g-pill-counter dark" id="stat-pill-count">시간표: 1/1</div>
+          <div class="g-pill-counter dark" id="stat-pill-count">시간표: 4/4</div>
         </div>
       </div>
 
-      <!-- Filter Bar -->
+      <!-- Filter Bar (Cleaned: All, Name, Items, Recent) -->
       <div class="g-filter-bar" id="filter-bar">
         <button type="button" class="g-filter-chip active" data-filter="all">전체 (All)</button>
         <button type="button" class="g-filter-chip" data-filter="name">이름순 (Name)</button>
         <button type="button" class="g-filter-chip" data-filter="items">활동 많은 순 (Items)</button>
         <button type="button" class="g-filter-chip" data-filter="recent">최근 수정순 (Started)</button>
-        <button type="button" class="g-filter-chip" data-filter="weekly">주간 시간표 (Weekly)</button>
-        <button type="button" class="g-filter-chip" data-filter="daily">일일 시간표 (Daily)</button>
       </div>
 
-      <!-- Schedule Cards 2-Column Grid -->
+      <!-- Clean Schedule Cards Grid -->
       <div class="g-card-grid" id="schedule-card-grid">
         <!-- Dynamically rendered by app.js -->
       </div>
@@ -303,9 +307,6 @@
     </div>
   </div>
 </div>
-
-<!-- Floating In-App Toast Notification -->
-<div id="push-toast-container" style="position:fixed; top:20px; right:20px; z-index:99999; display:flex; flex-direction:column; gap:10px; pointer-events:none;"></div>
 
 <script src="/pushwing-client.js"></script>
 <script src="/app.js" defer></script>

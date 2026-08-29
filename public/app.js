@@ -33,34 +33,17 @@ const SAMPLE_ITEMS = [
   sample("한글", 16.33, 17.33, [2], "#FF922B")
 ];
 
-// Initial preset schedules for Google Workspace Migrate style cards
+// Initial preset schedules
 const DEFAULT_PRESET_SCHEDULES = [
   {
     id: "preset-1",
     title: "김연진의 하루 시간표",
-    sourceName: "SharePoint folders",
-    targetName: "g.acmecorp.com",
-    icon: "📂",
     items: SAMPLE_ITEMS,
-    dataSize: "200GB",
-    duration: "00:20:17",
-    status: "Completed",
-    startTime: "2026.08.28 16:40:56",
-    endTime: "2026.08.28 17:01:13",
-    completedCount: 56873,
-    warningCount: 0,
-    failedCount: 0,
-    skippedCount: 0,
-    crawledCount: 0,
-    progressPercent: 100,
     updatedAt: new Date(Date.now() - 3600000).toISOString()
   },
   {
     id: "preset-2",
     title: "초등 방학 일주일 시간표",
-    sourceName: "Box to Workspace",
-    targetName: "g.acmecorp.com",
-    icon: "📦",
     items: [
       sample("방학특강", 9, 12, [0, 1, 2, 3, 4], "#FF6B6B"),
       sample("점심 & 휴식", 12, 13, [0, 1, 2, 3, 4, 5, 6], "#FCC419"),
@@ -68,66 +51,27 @@ const DEFAULT_PRESET_SCHEDULES = [
       sample("수영교실", 16, 17.5, [1, 3], "#339AF0"),
       sample("자유독서", 18, 19.5, [0, 1, 2, 3, 4], "#B197FC")
     ],
-    dataSize: "1.6TB",
-    duration: "01:14:53",
-    status: "Completed",
-    startTime: "2026.08.28 12:30:40",
-    endTime: "2026.08.28 13:45:33",
-    completedCount: 25329,
-    warningCount: 0,
-    failedCount: 0,
-    skippedCount: 2814,
-    crawledCount: 0,
-    progressPercent: 90,
     updatedAt: new Date(Date.now() - 7200000).toISOString()
   },
   {
     id: "preset-3",
     title: "주간 영어 & 예체능 루틴",
-    sourceName: "Swap Google accounts",
-    targetName: "g.acmecorp.com",
-    icon: "🔀",
     items: [
       sample("원어민회화", 10, 11.5, [1, 3, 5], "#51CF66"),
       sample("피아노레슨", 15, 16.5, [0, 2, 4], "#FF922B"),
       sample("미술창작", 17, 18.5, [2, 4], "#00008B"),
       sample("스트레칭", 20, 21, [0, 1, 2, 3, 4, 5, 6], "#F06595")
     ],
-    dataSize: "28GB",
-    duration: "00:03:36",
-    status: "Completed",
-    startTime: "2026.08.27 10:40:12",
-    endTime: "2026.08.27 10:43:48",
-    completedCount: 4000,
-    warningCount: 0,
-    failedCount: 0,
-    skippedCount: 0,
-    crawledCount: 0,
-    progressPercent: 100,
     updatedAt: new Date(Date.now() - 86400000).toISOString()
   },
   {
     id: "preset-4",
     title: "직장인 자기계발 & 자격증 루틴",
-    sourceName: "Exchange over",
-    targetName: "g.acmecorp.com",
-    icon: "📧",
     items: [
       sample("모닝독서", 9, 10, [0, 1, 2, 3, 4], "#B197FC"),
       sample("코딩프로젝트", 19, 20.5, [0, 1, 2, 3], "#339AF0"),
       sample("주말러닝", 9, 11, [5, 6], "#51CF66")
     ],
-    dataSize: "524GB",
-    duration: "00:28:06",
-    status: "Completed",
-    startTime: "2026.08.26 21:15:16",
-    endTime: "2026.08.26 21:43:22",
-    completedCount: 872412,
-    warningCount: 2,
-    failedCount: 0,
-    skippedCount: 36350,
-    crawledCount: 0,
-    progressPercent: 96,
     updatedAt: new Date(Date.now() - 172800000).toISOString()
   }
 ];
@@ -140,6 +84,7 @@ let items = [];
 let selectedItemId = null;
 let editingId = null;
 let currentFilter = "all";
+let activeOpenDropdownId = null;
 
 function sample(title, start, end, days, color) {
   return { id: `sample-${title}-${start}-${days.join("")}`, title, start, end, days, color };
@@ -195,11 +140,6 @@ function decToTimeStr(dec) {
   const h = Math.floor(total / 60);
   const m = ((total % 60) + 60) % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
-
-function timeStrToDec(str) {
-  const [h, m] = (str || "09:00").split(":").map(Number);
-  return (h || 0) + (m || 0) / 60;
 }
 
 const MINUTE_STEP = 10;
@@ -336,7 +276,6 @@ function loadHubSchedules() {
     }
   } catch (e) {}
 
-  // Fallback to default presets
   allSchedules = JSON.parse(JSON.stringify(DEFAULT_PRESET_SCHEDULES));
   saveHubSchedules();
 }
@@ -354,41 +293,53 @@ function getScheduleById(id) {
 function calculateScheduleStats(schedule) {
   const sItems = schedule.items || [];
   let totalMins = 0;
-  let weekendCount = 0;
-  let weekdayCount = 0;
 
   sItems.forEach(item => {
     const duration = Math.max(0, (item.end - item.start) * 60);
     const dayCount = (item.days || [0]).length;
     totalMins += duration * dayCount;
-
-    if ((item.days || []).some(d => d === 5 || d === 6)) {
-      weekendCount++;
-    } else {
-      weekdayCount++;
-    }
   });
 
   const totalHours = Math.round((totalMins / 60) * 10) / 10;
-  const plannedHoursPerDay = Math.min(12, Math.round(totalHours / 7 * 10) / 10);
-  const fillPercentage = Math.min(100, Math.round((plannedHoursPerDay / 12) * 100)) || (sItems.length > 0 ? 75 : 10);
-
   return {
     totalHours,
-    itemCount: sItems.length,
-    fillPercentage,
-    completedCount: schedule.completedCount || (sItems.length * 7 * 120),
-    warningCount: schedule.warningCount || 0,
-    failedCount: schedule.failedCount || 0,
-    skippedCount: schedule.skippedCount || (sItems.length > 5 ? 2814 : 0),
-    crawledCount: schedule.crawledCount || 0,
-    weekendCount,
-    weekdayCount
+    itemCount: sItems.length
   };
 }
 
+// Mini SVG Thumbnail Generator for each Card
+function createMiniSvgThumbnail(sItems) {
+  const size = 58;
+  const cx = size / 2;
+  const cy = size / 2;
+  const rBase = 9;
+  const lWidth = 2.4;
+
+  let paths = '';
+  (sItems || []).forEach(item => {
+    const a0 = hourToAngle(item.start);
+    const a1 = hourToAngle(item.end);
+    const ranges = consecutiveRanges(item.days);
+
+    ranges.forEach(range => {
+      const rIn = rBase + range.start * lWidth;
+      const rOut = rBase + range.end * lWidth;
+      const d = annularSectorPath(cx, cy, rIn, rOut, a0, a1);
+      paths += `<path d="${d}" fill="${item.color || '#FF6B6B'}" />`;
+    });
+  });
+
+  return `
+    <svg class="mini-thumb-svg" viewBox="0 0 ${size} ${size}">
+      <circle cx="${cx}" cy="${cy}" r="${rBase + 7 * lWidth}" fill="#f1f3f4" stroke="#dadce0" stroke-width="0.5" />
+      ${paths}
+      <circle cx="${cx}" cy="${cy}" r="${rBase - 1}" fill="#fff" stroke="#dadce0" stroke-width="0.5" />
+    </svg>
+  `;
+}
+
 // ==========================================
-// Dashboard View & Card Renderer
+// Dashboard View & Clean Card Renderer
 // ==========================================
 function renderDashboard() {
   const grid = $("schedule-card-grid");
@@ -396,7 +347,6 @@ function renderDashboard() {
 
   grid.innerHTML = "";
 
-  // Update counters
   const totalSchedules = allSchedules.length;
   const statPillCount = $("stat-pill-count");
   if (statPillCount) {
@@ -411,103 +361,57 @@ function renderDashboard() {
     filtered.sort((a, b) => (b.items || []).length - (a.items || []).length);
   } else if (currentFilter === "recent") {
     filtered.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
-  } else if (currentFilter === "weekly") {
-    filtered = filtered.filter(s => (s.items || []).some(i => (i.days || []).length > 2));
-  } else if (currentFilter === "daily") {
-    filtered = filtered.filter(s => (s.items || []).every(i => (i.days || []).length <= 2));
   }
 
   filtered.forEach(schedule => {
     const stats = calculateScheduleStats(schedule);
     const card = document.createElement("div");
-    card.className = "g-schedule-card";
+    card.className = "g-schedule-card-clean";
     card.dataset.id = schedule.id;
 
+    const dateStr = schedule.updatedAt ? new Date(schedule.updatedAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '방금 전';
+
     card.innerHTML = `
-      <!-- Card Header -->
-      <div class="card-header-row">
-        <div class="card-title-group">
-          <div class="card-title" style="cursor:pointer;" onclick="openScheduleEditor('${schedule.id}')">
-            ${escapeHtml(schedule.title)}
-          </div>
-          <div class="card-subtitle">
-            <span style="font-size:1.1rem;">${schedule.icon || "📋"}</span>
-            <strong>${escapeHtml(schedule.sourceName || "시간표")}</strong>
-            <span style="color:var(--g-text-muted);">➔</span>
-            <span style="color:var(--g-blue);">${escapeHtml(schedule.targetName || "g.acmecorp.com")}</span>
-          </div>
-        </div>
+      <!-- 1. Mini SVG Thumbnail -->
+      <div class="card-thumbnail-wrapper" onclick="openScheduleEditor('${schedule.id}')" title="시간표 열기">
+        ${createMiniSvgThumbnail(schedule.items)}
+      </div>
 
-        <div class="card-actions-top">
-          <button type="button" class="icon-btn" title="시간표 통계">📊</button>
-          <button type="button" class="icon-btn" title="히스토리">🕒</button>
-          <button type="button" class="icon-btn" title="설정">⚙️</button>
-          <button type="button" class="icon-btn" title="옵션 메뉴" onclick="toggleCardMenu(event, '${schedule.id}')">⋮</button>
+      <!-- 2. Card Details (Title & Items) -->
+      <div class="card-details-wrapper" onclick="openScheduleEditor('${schedule.id}')">
+        <div class="card-clean-title" title="${escapeHtml(schedule.title)}">
+          ${escapeHtml(schedule.title)}
+        </div>
+        <div class="card-clean-items">
+          <span>📋</span>
+          <span>활동 <strong>${stats.itemCount}개</strong> 등록됨</span>
+        </div>
+        <div class="card-clean-meta">
+          <span>⏱️ 총 ${stats.totalHours}시간 분량</span>
+          <span>•</span>
+          <span>수정: ${dateStr}</span>
         </div>
       </div>
 
-      <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; color:var(--g-text-muted);">
-        <span>총 활동 등록 분량: <strong>${stats.totalHours}시간</strong></span>
-        <span class="card-metric-tag">Data migrated: ${schedule.dataSize || "200GB"}</span>
-      </div>
-
-      <!-- Card Middle Row (Play Button & Details) -->
-      <div class="card-body-row">
-        <button type="button" class="btn-card-play" title="시간표 열기 & 편집" onclick="openScheduleEditor('${schedule.id}')">
-          ▶
+      <!-- 3. Horizontal Three Dots (⋯) & Dropdown -->
+      <div class="card-menu-container">
+        <button type="button" class="btn-horizontal-dots" title="옵션 메뉴" onclick="toggleCardDropdown(event, '${schedule.id}')">
+          ⋯
         </button>
 
-        <div class="card-info-meta">
-          <div class="card-status-line">
-            <span>⏱️ ${schedule.duration || "00:20:17"}</span>
-            <span>|</span>
-            <span class="card-status-badge">🟢 ${schedule.status || "Completed"}</span>
-          </div>
-          <div>Start: ${schedule.startTime || "2026/08/28 16:40:56 PM"}</div>
-          <div>End: ${schedule.endTime || "2026/08/28 17:01:13 PM"}</div>
-        </div>
-      </div>
-
-      <!-- Progress Bar -->
-      <div class="card-progress-container" title="계획 진행률 ${stats.fillPercentage}%">
-        <div class="card-progress-bar" style="width: ${stats.fillPercentage}%;"></div>
-      </div>
-
-      <!-- Bottom Badges / Metrics -->
-      <div class="card-stats-footer">
-        <div class="stat-pill-group">
-          <div class="stat-pill-label">
-            <span style="color:var(--g-success);">✔</span> Completed
-          </div>
-          <div class="stat-pill-value">${stats.completedCount.toLocaleString()}</div>
-        </div>
-
-        <div class="stat-pill-group">
-          <div class="stat-pill-label">
-            <span style="color:var(--g-warning);">!</span> Warning
-          </div>
-          <div class="stat-pill-value">${stats.warningCount}</div>
-        </div>
-
-        <div class="stat-pill-group">
-          <div class="stat-pill-label">
-            <span style="color:var(--g-danger);">✖</span> Failed
-          </div>
-          <div class="stat-pill-value">${stats.failedCount}</div>
-        </div>
-
-        <div class="stat-pill-group">
-          <div class="stat-pill-label">
-            <span style="color:var(--g-blue);">▶</span> Skipped
-          </div>
-          <div class="stat-pill-value">${stats.skippedCount.toLocaleString()}</div>
-        </div>
-
-        <div class="stat-pill-group">
-          <div class="stat-pill-label">
-            <span style="color:var(--g-text-muted);">🔍</span> Crawled
-          </div>
-          <div class="stat-pill-value">${stats.crawledCount}</div>
+        <div id="dropdown-${schedule.id}" class="card-dropdown-menu" style="display:none;">
+          <button type="button" class="card-dropdown-item" onclick="duplicateSchedule('${schedule.id}')">
+            <span>📋</span>
+            <span>복제하기</span>
+          </button>
+          <button type="button" class="card-dropdown-item" onclick="renameSchedule('${schedule.id}')">
+            <span>✏️</span>
+            <span>이름 변경</span>
+          </button>
+          <button type="button" class="card-dropdown-item danger" onclick="deleteSchedule('${schedule.id}')">
+            <span>🗑️</span>
+            <span>삭제하기</span>
+          </button>
         </div>
       </div>
     `;
@@ -530,19 +434,31 @@ window.openScheduleEditor = function(id) {
   renderSchedule();
 };
 
-window.toggleCardMenu = function(event, id) {
+window.toggleCardDropdown = function(event, id) {
   event.stopPropagation();
-  const choice = prompt("원하시는 작업을 선택하세요:\n1. 📋 복제하기 (Duplicate)\n2. 🗑️ 삭제하기 (Delete)\n3. ✏️ 이름 변경 (Rename)", "1");
-  if (choice === "1") {
-    duplicateSchedule(id);
-  } else if (choice === "2") {
-    deleteSchedule(id);
-  } else if (choice === "3") {
-    renameSchedule(id);
+  const dropdown = $(`dropdown-${id}`);
+  if (!dropdown) return;
+
+  const isAlreadyOpen = dropdown.style.display === "flex";
+  closeAllDropdowns();
+
+  if (!isAlreadyOpen) {
+    dropdown.style.display = "flex";
+    activeOpenDropdownId = id;
   }
 };
 
-function duplicateSchedule(id) {
+function closeAllDropdowns() {
+  document.querySelectorAll(".card-dropdown-menu").forEach(el => el.style.display = "none");
+  activeOpenDropdownId = null;
+}
+
+document.addEventListener("click", () => {
+  closeAllDropdowns();
+});
+
+window.duplicateSchedule = function(id) {
+  closeAllDropdowns();
   const schedule = getScheduleById(id);
   if (!schedule) return;
 
@@ -553,13 +469,13 @@ function duplicateSchedule(id) {
   allSchedules.unshift(newSchedule);
   saveHubSchedules();
   renderDashboard();
-  alert(`'${newSchedule.title}' 이 복제되어 보관함에 추가되었습니다.`);
-}
+  showTopHeaderNotification(`📋 '${newSchedule.title}' 시간표가 복제되었습니다.`);
+};
 
-function deleteSchedule(id) {
+window.deleteSchedule = function(id) {
+  closeAllDropdowns();
   if (allSchedules.length <= 1) {
-    alert("최소 1개의 시간표는 유지되어야 합니다.");
-    return;
+    return alert("최소 1개의 시간표는 유지되어야 합니다.");
   }
   const schedule = getScheduleById(id);
   if (!confirm(`'${schedule.title}' 시간표를 삭제하시겠습니까?`)) return;
@@ -567,9 +483,11 @@ function deleteSchedule(id) {
   allSchedules = allSchedules.filter(s => s.id !== id);
   saveHubSchedules();
   renderDashboard();
-}
+  showTopHeaderNotification(`🗑️ '${schedule.title}' 시간표가 삭제되었습니다.`);
+};
 
-function renameSchedule(id) {
+window.renameSchedule = function(id) {
+  closeAllDropdowns();
   const schedule = getScheduleById(id);
   if (!schedule) return;
 
@@ -579,8 +497,9 @@ function renameSchedule(id) {
     schedule.updatedAt = new Date().toISOString();
     saveHubSchedules();
     renderDashboard();
+    showTopHeaderNotification(`✏️ 시간표 제목이 '${schedule.title}'(으)로 변경되었습니다.`);
   }
-}
+};
 
 function createNewSchedule() {
   const newId = "sched-" + Date.now();
@@ -588,27 +507,14 @@ function createNewSchedule() {
   const newSchedule = {
     id: newId,
     title: newTitle,
-    sourceName: "New Schedule",
-    targetName: "g.acmecorp.com",
-    icon: "🆕",
     items: [],
-    dataSize: "0GB",
-    duration: "00:00:00",
-    status: "Active",
-    startTime: new Date().toLocaleDateString(),
-    endTime: "-",
-    completedCount: 0,
-    warningCount: 0,
-    failedCount: 0,
-    skippedCount: 0,
-    crawledCount: 0,
-    progressPercent: 0,
     updatedAt: new Date().toISOString()
   };
 
   allSchedules.unshift(newSchedule);
   saveHubSchedules();
   openScheduleEditor(newId);
+  showTopHeaderNotification(`➕ '${newTitle}' 생성이 완료되었습니다.`);
 }
 
 // Navigation View Switchers
@@ -635,6 +541,32 @@ function syncCurrentScheduleToHub() {
     current.updatedAt = new Date().toISOString();
     saveHubSchedules();
   }
+}
+
+// ==========================================
+// Top Blue Header Push Notification Banner
+// ==========================================
+let headerPushTimeout = null;
+function showTopHeaderNotification(message) {
+  const banner = $("header-push-banner");
+  const text = $("header-push-text");
+  if (!banner || !text) return;
+
+  text.textContent = message;
+  banner.style.display = "flex";
+
+  if (headerPushTimeout) clearTimeout(headerPushTimeout);
+  headerPushTimeout = setTimeout(() => {
+    banner.style.display = "none";
+  }, 8000);
+}
+
+const btnCloseHeaderPush = $("btn-close-header-push");
+if (btnCloseHeaderPush) {
+  btnCloseHeaderPush.addEventListener("click", () => {
+    const banner = $("header-push-banner");
+    if (banner) banner.style.display = "none";
+  });
 }
 
 // ==========================================
@@ -703,7 +635,7 @@ function renderSchedule() {
   }
 
   // Activity Blocks
-  items.forEach((item, itemIdx) => {
+  items.forEach((item) => {
     const a0 = hourToAngle(item.start);
     const a1 = hourToAngle(item.end);
     const ranges = consecutiveRanges(item.days);
@@ -725,7 +657,6 @@ function renderSchedule() {
       path.addEventListener("click", () => selectItem(item.id));
       svg.appendChild(path);
 
-      // Label
       const midAngle = a0 + (a1 - a0) / 2;
       const midR = (rIn + rOut) / 2;
       const pos = polarToXY(CX, CY, midR, midAngle);
@@ -899,10 +830,23 @@ function setupColorSwatches() {
 }
 
 function setupEvents() {
-  // Navigation
+  // Sidebar Toggle (☰ Button)
+  const btnToggleSidebar = $("btn-toggle-sidebar");
+  const sidebar = $("g-sidebar");
+  if (btnToggleSidebar && sidebar) {
+    btnToggleSidebar.addEventListener("click", () => {
+      sidebar.classList.toggle("collapsed");
+    });
+  }
+
+  // Navigation Tabs
   $("nav-dashboard").addEventListener("click", showDashboardView);
   $("nav-editor").addEventListener("click", showEditorView);
-  $("nav-push").addEventListener("click", () => $("btn-open-push-modal").click());
+  $("nav-push").addEventListener("click", () => {
+    $("push-modal").style.display = "flex";
+    loadAvailableApps();
+    updatePushStatusUI();
+  });
   $("btn-back-to-dashboard").addEventListener("click", showDashboardView);
 
   $("btn-sidebar-new").addEventListener("click", createNewSchedule);
@@ -913,9 +857,10 @@ function setupEvents() {
     renderList();
     renderSchedule();
     showEditorView();
+    showTopHeaderNotification("📋 원본 샘플 시간표가 로드되었습니다.");
   });
 
-  // Filter chips
+  // Filter chips (All, Name, Items, Recent)
   const filterChips = document.querySelectorAll(".g-filter-chip");
   filterChips.forEach(chip => {
     chip.addEventListener("click", () => {
@@ -1091,17 +1036,7 @@ function setupEvents() {
     if (supabase) await supabase.auth.signOut();
   });
 
-  // Push Modal
-  $("btn-open-push-modal").addEventListener("click", async () => {
-    $("push-modal").style.display = "flex";
-    const pushUserId = $("push-user-id");
-    if (pushUserId && currentUser && currentUser.email) {
-      pushUserId.value = currentUser.email;
-    }
-    await loadAvailableApps();
-    await updatePushStatusUI();
-  });
-
+  // Push Modal Events
   $("btn-close-push-modal").addEventListener("click", () => {
     $("push-modal").style.display = "none";
   });
@@ -1184,7 +1119,8 @@ function setupEvents() {
       const data = await res.json();
       if (data.success) {
         if (data.deliveredCount > 0) {
-          alert(`✅ [서버 전송 성공] 총 ${data.deliveredCount}대의 기기로 푸시가 성공적으로 전송되었습니다!\n\n💡 만약 화면 배너가 바로 뜨지 않는다면:\n1. 맥 화면 우측 상단 '제어 센터'에서 [집중 모드]가 켜져 있는지 확인해 주세요.\n2. 맥 [시스템 설정 -> 알림 -> Chrome]에서 알림 스타일이 '배너'인지 확인해 주세요.`);
+          showTopHeaderNotification(`🔔 [푸시 발송 성공] ${title} 알림이 정상 전송되었습니다!`);
+          alert(`✅ [서버 전송 성공] 총 ${data.deliveredCount}대의 기기로 푸시가 성공적으로 전송되었습니다!`);
         } else {
           alert(`[${selectedKey}] 키로 구독 중인 기기를 찾을 수 없습니다. 먼저 [🔔 웹 푸시 알림 받기]를 완료해 주세요.`);
         }
@@ -1210,7 +1146,7 @@ function setupEvents() {
           body: "이 팝업이 화면에 보이면 맥(Mac) OS와 브라우저 알림이 100% 정상 작동하는 상태입니다.",
           requireInteraction: true
         });
-        showInAppToast("⏰ [로컬 팝업 테스트] 알림 실행 완료!", "맥 화면 우측 상단 배너를 확인해 보세요.");
+        showTopHeaderNotification("🧪 [로컬 팝업 테스트] 알림 실행 완료!");
       } else {
         alert("알림 권한이 거부되어 있습니다. 브라우저 설정에서 알림을 허용해 주세요.");
       }
@@ -1237,30 +1173,11 @@ async function loadAvailableApps() {
   } catch (e) {}
 }
 
-function showInAppToast(title, body) {
-  const container = $("push-toast-container");
-  if (!container) return;
-
-  const toast = document.createElement("div");
-  toast.style.cssText = "background:#1e293b; color:#fff; border:1px solid #1a73e8; border-radius:10px; padding:14px 18px; box-shadow:0 10px 25px rgba(0,0,0,0.4); font-size:0.9rem; max-width:350px; pointer-events:auto;";
-  toast.innerHTML = `
-    <div style="font-weight:bold; color:#60a5fa; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
-      <span>🔔 ${title}</span>
-      <button style="background:none; border:none; color:#94a3b8; font-size:1rem; cursor:pointer; padding:0 4px;" onclick="this.parentElement.parentElement.remove()">✕</button>
-    </div>
-    <div style="color:#e2e8f0; font-size:0.85rem;">${body}</div>
-  `;
-  container.appendChild(toast);
-
-  setTimeout(() => {
-    if (toast.parentElement) toast.remove();
-  }, 9000);
-}
-
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.addEventListener("message", (event) => {
     if (event.data && event.data.type === "PUSH_NOTIFICATION_RECEIVED") {
-      showInAppToast(event.data.title || "새 푸시 알림", event.data.body || "");
+      const msg = `🔔 [푸시 알림] ${event.data.title || ''}: ${event.data.body || ''}`;
+      showTopHeaderNotification(msg);
     }
   });
 }
