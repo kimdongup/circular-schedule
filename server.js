@@ -165,7 +165,8 @@ app.post('/api/v1/apps', requireAdminAuth, async (req, res) => {
     if (!app_name) {
       return res.status(400).json({ success: false, error: 'app_name is required' });
     }
-    const finalAppKey = app_key || `app-${Date.now()}`;
+    const cleanKey = (app_key || app_name).trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '');
+    const finalAppKey = cleanKey || `app-${Date.now()}`;
     const finalSecretKey = secret_key || `sec-${Math.random().toString(36).substring(2, 10)}`;
 
     const newApp = await db.createApp(finalAppKey, app_name, finalSecretKey);

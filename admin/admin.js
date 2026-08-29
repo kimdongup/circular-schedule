@@ -188,13 +188,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // 6. Fetch Apps List
-  async function loadApps() {
+  async function loadApps(selectAppKey = null) {
     try {
       const res = await fetchWithAuth('/api/v1/apps');
       const data = await res.json();
       if (data.success && data.apps) {
-        const currentVal1 = adminTargetApp.value;
-        const currentVal2 = filterSubApp.value;
+        const currentVal1 = selectAppKey || adminTargetApp.value;
+        const currentVal2 = selectAppKey || filterSubApp.value;
 
         adminTargetApp.innerHTML = '';
         filterSubApp.innerHTML = '<option value="">전체 App Key</option>';
@@ -270,11 +270,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         body: JSON.stringify({ app_name: appName, app_key: appKey || null })
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.app) {
         alert(`🎉 신규 App Key 발급 완료!\n\nApp Key: ${data.app.app_key}\nSecret Key: ${data.app.secret_key}`);
         adminAppName.value = '';
         adminAppKey.value = '';
-        loadAllDashboardData();
+        await loadApps(data.app.app_key);
+        await Promise.all([loadStats(), loadSubscriptions(), loadLogs()]);
       } else {
         alert('발급 실패: ' + data.error);
       }

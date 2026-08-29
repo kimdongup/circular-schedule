@@ -906,6 +906,7 @@ function setupEvents() {
   // ==========================================
   $("btn-open-push-modal").addEventListener("click", async () => {
     $("push-modal").style.display = "flex";
+    await loadAvailableApps();
     await updatePushStatusUI();
   });
 
@@ -913,11 +914,28 @@ function setupEvents() {
     $("push-modal").style.display = "none";
   });
 
+  const selectAppEl = $("push-select-app");
+  if (selectAppEl) {
+    selectAppEl.addEventListener("change", (e) => {
+      const selectedKey = e.target.value;
+      if (selectedKey) {
+        localStorage.setItem("PUSH_SELECTED_APP_KEY", selectedKey);
+        if (pushwingClient) {
+          pushwingClient.appKey = selectedKey;
+        }
+        updatePushStatusUI();
+      }
+    });
+  }
+
   $("btn-toggle-push-sub").addEventListener("click", async () => {
     if (!pushwingClient) {
       alert("Pushwing 클라이언트를 로드할 수 없습니다.");
       return;
     }
+    const selectedKey = $("push-select-app") ? $("push-select-app").value : "demo-app-key-2026";
+    pushwingClient.appKey = selectedKey;
+
     const status = await pushwingClient.getSubscriptionStatus();
     const btn = $("btn-toggle-push-sub");
     btn.disabled = true;
@@ -930,7 +948,7 @@ function setupEvents() {
       } else {
         const userId = $("push-user-id").value.trim() || "user-my-schedule";
         await pushwingClient.subscribe(userId);
-        alert("🔔 웹 푸시 알림 구독이 완료되었습니다!");
+        alert(`🔔 [${selectedKey}] 앱 키로 웹 푸시 알림 구독이 완료되었습니다!`);
       }
     } catch (err) {
       alert("푸시 알림 설정 실패: " + err.message);
@@ -941,6 +959,7 @@ function setupEvents() {
   });
 
   $("btn-send-test-push").addEventListener("click", async () => {
+    const selectedKey = $("push-select-app") ? $("push-select-app").value : "demo-app-key-2026";
     const userId = $("push-user-id").value.trim();
     const title = $("schedule-title").value || "나의 일주일 시간표";
     const btn = $("btn-send-test-push");
@@ -952,10 +971,10 @@ function setupEvents() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          app_key: "demo-app-key-2026",
+          app_key: selectedKey,
           user_id: userId || null,
           title: `⏰ [시간표 알림] ${title}`,
-          body: "잠시 후 등록된 활동 일정이 시작됩니다! (테스트 알림)",
+          body: `잠시 후 등록된 활동 일정이 시작됩니다! (앱: ${selectedKey})`,
           url: "/"
         })
       });
@@ -964,7 +983,7 @@ function setupEvents() {
         if (data.deliveredCount > 0) {
           alert(`✅ 테스트 푸시가 성공적으로 전송되었습니다! (수신 기기: ${data.deliveredCount}대)`);
         } else {
-          alert("구독 중인 기기를 찾을 수 없습니다. 먼저 [🔔 웹 푸시 알림 받기]를 완료해 주세요.");
+          alert(`[${selectedKey}] 키로 구독 중인 기기를 찾을 수 없습니다. 먼저 [🔔 웹 푸시 알림 받기]를 완료해 주세요.`);
         }
       } else {
         alert("발송 실패: " + (data.error || "알 수 없는 오류"));
@@ -980,15 +999,49 @@ function setupEvents() {
 
 let pushwingClient = null;
 
+async function loadAvailableApps() {
+  const selectApp = $("push-select-app");
+  if (!selectApp) return;
+
+  try {
+    const res = await fetch("/api/v1/apps");
+    const data = await res.json();
+    if (data.success && data.apps && data.apps.length > 0) {
+      const savedKey = localStorage.getItem("PUSH_SELECTED_APP_KEY") || "demo-app-key-2026";
+      selectApp.innerHTML = "";
+
+      data.apps.forEach((app) => {
+        const opt = document.createElement("option");
+        opt.value = app.app_key;
+        opt.textContent = `${app.app_name} (${app.app_key})`;
+        if (app.app_key === savedKey) opt.selected = true;
+        selectApp.appendChild(opt);
+      });
+
+      if (!selectApp.value && data.apps[0]) {
+        selectApp.value = data.apps[0].app_key;
+      }
+
+      if (pushwingClient) {
+        pushwingClient.appKey = selectApp.value;
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to load apps list:", err);
+  }
+}
+
 async function initPushwing() {
+  const savedKey = localStorage.getItem("PUSH_SELECTED_APP_KEY") || "demo-app-key-2026";
   if (typeof PushwingClient !== "undefined") {
     pushwingClient = new PushwingClient({
       serverUrl: window.location.origin,
-      appKey: "demo-app-key-2026",
+      appKey: savedKey,
       swPath: "/sw.js",
       scope: "/"
     });
   }
+  await loadAvailableApps();
   await updatePushStatusUI();
 }
 
@@ -1007,13 +1060,18 @@ async function updatePushStatusUI() {
     else permEl.textContent = "⏳ 미설정 (동의 필요)";
   }
 
+  const selectApp = $("push-select-app");
+  const currentKey = (selectApp && selectApp.value) || localStorage.getItem("PUSH_SELECTED_APP_KEY") || "demo-app-key-2026";
+
   if (!pushwingClient && typeof PushwingClient !== "undefined") {
     pushwingClient = new PushwingClient({
       serverUrl: window.location.origin,
-      appKey: "demo-app-key-2026",
+      appKey: currentKey,
       swPath: "/sw.js",
       scope: "/"
     });
+  } else if (pushwingClient) {
+    pushwingClient.appKey = currentKey;
   }
 
   if (!pushwingClient) {
@@ -1030,7 +1088,7 @@ async function updatePushStatusUI() {
       else permEl.textContent = "⏳ 미설정 (동의 필요)";
     }
     if (subEl) {
-      subEl.textContent = status.subscribed ? "🔔 수신 중 (구독됨)" : "🔕 미구독";
+      subEl.textContent = status.subscribed ? `🔔 [${currentKey}] 구독됨` : "🔕 미구독";
       subEl.style.color = status.subscribed ? "var(--success)" : "var(--danger)";
     }
     if (toggleBtn) {
@@ -1038,7 +1096,7 @@ async function updatePushStatusUI() {
         toggleBtn.textContent = "🔕 푸시 알림 구독 해제";
         toggleBtn.className = "btn btn-outline-danger";
       } else {
-        toggleBtn.textContent = "🔔 웹 푸시 알림 받기 (구독)";
+        toggleBtn.textContent = `🔔 [${currentKey}] 알림 받기 (구독)`;
         toggleBtn.className = "btn btn-primary";
       }
     }
