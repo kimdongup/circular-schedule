@@ -1,4 +1,4 @@
-// 원형 일주일 시간표 — circle.py polar 매핑
+// 원형 일주일 시간표 & Google Workspace Migrate 스타일 대시보드 허브
 // 9시 = 북쪽, 시계방향 12시간(9~21), 동심원 7개 = 월(안쪽)~일(바깥쪽)
 
 const START_HOUR = 9;
@@ -9,9 +9,8 @@ const INNER_BASE_R = 52;
 const LAYER_WIDTH = 28;
 
 const STORAGE_KEY = "CIRCULAR_SCHEDULE_ITEMS_V3";
-const LEGACY_STORAGE_KEYS = ["CIRCULAR_SCHEDULE_ITEMS_V2"];
 const TITLE_STORAGE_KEY = "CIRCULAR_SCHEDULE_TITLE_V3";
-const LEGACY_TITLE_KEYS = ["CIRCULAR_SCHEDULE_TITLE_V2"];
+const HUB_STORAGE_KEY = "CIRCULAR_SCHEDULE_HUB_V2";
 
 const DAYS = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"];
 const DAY_SHORT = ["월", "화", "수", "목", "금", "토", "일"];
@@ -34,12 +33,113 @@ const SAMPLE_ITEMS = [
   sample("한글", 16.33, 17.33, [2], "#FF922B")
 ];
 
+// Initial preset schedules for Google Workspace Migrate style cards
+const DEFAULT_PRESET_SCHEDULES = [
+  {
+    id: "preset-1",
+    title: "김연진의 하루 시간표",
+    sourceName: "SharePoint folders",
+    targetName: "g.acmecorp.com",
+    icon: "📂",
+    items: SAMPLE_ITEMS,
+    dataSize: "200GB",
+    duration: "00:20:17",
+    status: "Completed",
+    startTime: "2026.08.28 16:40:56",
+    endTime: "2026.08.28 17:01:13",
+    completedCount: 56873,
+    warningCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    crawledCount: 0,
+    progressPercent: 100,
+    updatedAt: new Date(Date.now() - 3600000).toISOString()
+  },
+  {
+    id: "preset-2",
+    title: "초등 방학 일주일 시간표",
+    sourceName: "Box to Workspace",
+    targetName: "g.acmecorp.com",
+    icon: "📦",
+    items: [
+      sample("방학특강", 9, 12, [0, 1, 2, 3, 4], "#FF6B6B"),
+      sample("점심 & 휴식", 12, 13, [0, 1, 2, 3, 4, 5, 6], "#FCC419"),
+      sample("영어캠프", 13, 15.5, [0, 2, 4], "#51CF66"),
+      sample("수영교실", 16, 17.5, [1, 3], "#339AF0"),
+      sample("자유독서", 18, 19.5, [0, 1, 2, 3, 4], "#B197FC")
+    ],
+    dataSize: "1.6TB",
+    duration: "01:14:53",
+    status: "Completed",
+    startTime: "2026.08.28 12:30:40",
+    endTime: "2026.08.28 13:45:33",
+    completedCount: 25329,
+    warningCount: 0,
+    failedCount: 0,
+    skippedCount: 2814,
+    crawledCount: 0,
+    progressPercent: 90,
+    updatedAt: new Date(Date.now() - 7200000).toISOString()
+  },
+  {
+    id: "preset-3",
+    title: "주간 영어 & 예체능 루틴",
+    sourceName: "Swap Google accounts",
+    targetName: "g.acmecorp.com",
+    icon: "🔀",
+    items: [
+      sample("원어민회화", 10, 11.5, [1, 3, 5], "#51CF66"),
+      sample("피아노레슨", 15, 16.5, [0, 2, 4], "#FF922B"),
+      sample("미술창작", 17, 18.5, [2, 4], "#00008B"),
+      sample("스트레칭", 20, 21, [0, 1, 2, 3, 4, 5, 6], "#F06595")
+    ],
+    dataSize: "28GB",
+    duration: "00:03:36",
+    status: "Completed",
+    startTime: "2026.08.27 10:40:12",
+    endTime: "2026.08.27 10:43:48",
+    completedCount: 4000,
+    warningCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    crawledCount: 0,
+    progressPercent: 100,
+    updatedAt: new Date(Date.now() - 86400000).toISOString()
+  },
+  {
+    id: "preset-4",
+    title: "직장인 자기계발 & 자격증 루틴",
+    sourceName: "Exchange over",
+    targetName: "g.acmecorp.com",
+    icon: "📧",
+    items: [
+      sample("모닝독서", 9, 10, [0, 1, 2, 3, 4], "#B197FC"),
+      sample("코딩프로젝트", 19, 20.5, [0, 1, 2, 3], "#339AF0"),
+      sample("주말러닝", 9, 11, [5, 6], "#51CF66")
+    ],
+    dataSize: "524GB",
+    duration: "00:28:06",
+    status: "Completed",
+    startTime: "2026.08.26 21:15:16",
+    endTime: "2026.08.26 21:43:22",
+    completedCount: 872412,
+    warningCount: 2,
+    failedCount: 0,
+    skippedCount: 36350,
+    crawledCount: 0,
+    progressPercent: 96,
+    updatedAt: new Date(Date.now() - 172800000).toISOString()
+  }
+];
+
 let supabase = null;
 let currentUser = null;
-let currentScheduleId = null;
+let currentScheduleId = "preset-1";
+let allSchedules = [];
 let items = [];
 let selectedItemId = null;
 let editingId = null;
+let currentFilter = "all";
 
 function sample(title, start, end, days, color) {
   return { id: `sample-${title}-${start}-${days.join("")}`, title, start, end, days, color };
@@ -98,74 +198,52 @@ function decToTimeStr(dec) {
 }
 
 function timeStrToDec(str) {
-  if (!str) return NaN;
-  const parts = String(str).split(":");
-  const h = Number(parts[0]);
-  const m = Number(parts[1] || 0);
-  if (!Number.isFinite(h) || !Number.isFinite(m)) return NaN;
-  return h + m / 60;
+  const [h, m] = (str || "09:00").split(":").map(Number);
+  return (h || 0) + (m || 0) / 60;
 }
 
 const MINUTE_STEP = 10;
 const TIME_MIN = START_HOUR * 60;
 const TIME_MAX = (START_HOUR + TOTAL_HOURS) * 60;
 
-let startMinutes = 10 * 60;
-let endMinutes = 11 * 60 + 30;
+let startMinutes = 9 * 60;
+let endMinutes = 10 * 60 + 30;
 
 function minsToDec(mins) {
-  return mins / 60;
+  return Math.round((mins / 60) * 100) / 100;
 }
 
-function formatDuration(mins) {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  if (h && m) return `${h}시간 ${m}분`;
-  if (h) return `${h}시간`;
+function decToMins(dec) {
+  return Math.round(Number(dec) * 60);
+}
+
+function formatDurationKorean(totalMins) {
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  if (h > 0 && m > 0) return `${h}시간 ${m}분`;
+  if (h > 0) return `${h}시간`;
   return `${m}분`;
-}
-
-function ensureOptionExists(selectEl, mins) {
-  const strVal = String(mins);
-  for (let i = 0; i < selectEl.options.length; i += 1) {
-    if (selectEl.options[i].value === strVal) return;
-  }
-  const opt = document.createElement("option");
-  opt.value = strVal;
-  opt.textContent = decToTimeStr(mins / 60);
-  let inserted = false;
-  for (let i = 0; i < selectEl.options.length; i += 1) {
-    if (Number(selectEl.options[i].value) > mins) {
-      selectEl.insertBefore(opt, selectEl.options[i]);
-      inserted = true;
-      break;
-    }
-  }
-  if (!inserted) selectEl.appendChild(opt);
 }
 
 function syncTimeDropdowns() {
   const startSel = $("select-start");
   const endSel = $("select-end");
+  const durationBadge = $("time-duration");
   if (!startSel || !endSel) return;
-
-  ensureOptionExists(startSel, startMinutes);
-  ensureOptionExists(endSel, endMinutes);
 
   startSel.value = String(startMinutes);
   endSel.value = String(endMinutes);
 
-  const duration = endMinutes - startMinutes;
-  const durationEl = $("time-duration");
-  if (durationEl) {
-    durationEl.textContent = duration > 0 ? formatDuration(duration) : "시간 확인 필요";
+  const duration = Math.max(0, endMinutes - startMinutes);
+  if (durationBadge) {
+    durationBadge.textContent = formatDurationKorean(duration);
   }
 }
 
-function setTimeRange(startDec, endDec) {
-  startMinutes = Math.max(TIME_MIN, Math.min(TIME_MAX, Math.round(Number(startDec) * 60)));
-  endMinutes = Math.max(TIME_MIN, Math.min(TIME_MAX, Math.round(Number(endDec) * 60)));
-  if (startMinutes >= endMinutes) {
+function setTimeDropdownsFromDec(startDec, endDec) {
+  startMinutes = Math.max(TIME_MIN, Math.min(TIME_MAX, decToMins(startDec)));
+  endMinutes = Math.max(TIME_MIN, Math.min(TIME_MAX, decToMins(endDec)));
+  if (endMinutes <= startMinutes) {
     endMinutes = Math.min(TIME_MAX, startMinutes + 60 <= TIME_MAX ? startMinutes + 60 : startMinutes + MINUTE_STEP);
   }
   syncTimeDropdowns();
@@ -243,581 +321,711 @@ function normalizeItem(item, idx) {
   };
 }
 
-function safeStorageGet(key) {
+// ==========================================
+// Multi-Schedule Hub Data Model
+// ==========================================
+function loadHubSchedules() {
   try {
-    return localStorage.getItem(key);
-  } catch (err) {
-    return null;
-  }
+    const raw = localStorage.getItem(HUB_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        allSchedules = parsed;
+        return;
+      }
+    }
+  } catch (e) {}
+
+  // Fallback to default presets
+  allSchedules = JSON.parse(JSON.stringify(DEFAULT_PRESET_SCHEDULES));
+  saveHubSchedules();
 }
 
-function safeStorageSet(key, value) {
+function saveHubSchedules() {
   try {
-    localStorage.setItem(key, value);
-  } catch (err) {
-    console.warn("localStorage 저장 실패", err);
-  }
+    localStorage.setItem(HUB_STORAGE_KEY, JSON.stringify(allSchedules));
+  } catch (e) {}
 }
 
-function hourToTheta(hour) {
-  const relHour = hour - START_HOUR;
-  return (relHour / TOTAL_HOURS) * 2 * Math.PI;
+function getScheduleById(id) {
+  return allSchedules.find(s => s.id === id) || allSchedules[0];
 }
 
-function polarToCartesian(theta, r) {
+function calculateScheduleStats(schedule) {
+  const sItems = schedule.items || [];
+  let totalMins = 0;
+  let weekendCount = 0;
+  let weekdayCount = 0;
+
+  sItems.forEach(item => {
+    const duration = Math.max(0, (item.end - item.start) * 60);
+    const dayCount = (item.days || [0]).length;
+    totalMins += duration * dayCount;
+
+    if ((item.days || []).some(d => d === 5 || d === 6)) {
+      weekendCount++;
+    } else {
+      weekdayCount++;
+    }
+  });
+
+  const totalHours = Math.round((totalMins / 60) * 10) / 10;
+  const plannedHoursPerDay = Math.min(12, Math.round(totalHours / 7 * 10) / 10);
+  const fillPercentage = Math.min(100, Math.round((plannedHoursPerDay / 12) * 100)) || (sItems.length > 0 ? 75 : 10);
+
   return {
-    x: CX + r * Math.sin(theta),
-    y: CY - r * Math.cos(theta)
+    totalHours,
+    itemCount: sItems.length,
+    fillPercentage,
+    completedCount: schedule.completedCount || (sItems.length * 7 * 120),
+    warningCount: schedule.warningCount || 0,
+    failedCount: schedule.failedCount || 0,
+    skippedCount: schedule.skippedCount || (sItems.length > 5 ? 2814 : 0),
+    crawledCount: schedule.crawledCount || 0,
+    weekendCount,
+    weekdayCount
   };
 }
 
-function svgEl(name, attrs) {
-  const el = document.createElementNS("http://www.w3.org/2000/svg", name);
-  Object.entries(attrs).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) el.setAttribute(key, String(value));
+// ==========================================
+// Dashboard View & Card Renderer
+// ==========================================
+function renderDashboard() {
+  const grid = $("schedule-card-grid");
+  if (!grid) return;
+
+  grid.innerHTML = "";
+
+  // Update counters
+  const totalSchedules = allSchedules.length;
+  const statPillCount = $("stat-pill-count");
+  if (statPillCount) {
+    statPillCount.textContent = `시간표: ${totalSchedules}/${totalSchedules}`;
+  }
+
+  let filtered = [...allSchedules];
+
+  if (currentFilter === "name") {
+    filtered.sort((a, b) => a.title.localeCompare(b.title));
+  } else if (currentFilter === "items") {
+    filtered.sort((a, b) => (b.items || []).length - (a.items || []).length);
+  } else if (currentFilter === "recent") {
+    filtered.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+  } else if (currentFilter === "weekly") {
+    filtered = filtered.filter(s => (s.items || []).some(i => (i.days || []).length > 2));
+  } else if (currentFilter === "daily") {
+    filtered = filtered.filter(s => (s.items || []).every(i => (i.days || []).length <= 2));
+  }
+
+  filtered.forEach(schedule => {
+    const stats = calculateScheduleStats(schedule);
+    const card = document.createElement("div");
+    card.className = "g-schedule-card";
+    card.dataset.id = schedule.id;
+
+    card.innerHTML = `
+      <!-- Card Header -->
+      <div class="card-header-row">
+        <div class="card-title-group">
+          <div class="card-title" style="cursor:pointer;" onclick="openScheduleEditor('${schedule.id}')">
+            ${escapeHtml(schedule.title)}
+          </div>
+          <div class="card-subtitle">
+            <span style="font-size:1.1rem;">${schedule.icon || "📋"}</span>
+            <strong>${escapeHtml(schedule.sourceName || "시간표")}</strong>
+            <span style="color:var(--g-text-muted);">➔</span>
+            <span style="color:var(--g-blue);">${escapeHtml(schedule.targetName || "g.acmecorp.com")}</span>
+          </div>
+        </div>
+
+        <div class="card-actions-top">
+          <button type="button" class="icon-btn" title="시간표 통계">📊</button>
+          <button type="button" class="icon-btn" title="히스토리">🕒</button>
+          <button type="button" class="icon-btn" title="설정">⚙️</button>
+          <button type="button" class="icon-btn" title="옵션 메뉴" onclick="toggleCardMenu(event, '${schedule.id}')">⋮</button>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; color:var(--g-text-muted);">
+        <span>총 활동 등록 분량: <strong>${stats.totalHours}시간</strong></span>
+        <span class="card-metric-tag">Data migrated: ${schedule.dataSize || "200GB"}</span>
+      </div>
+
+      <!-- Card Middle Row (Play Button & Details) -->
+      <div class="card-body-row">
+        <button type="button" class="btn-card-play" title="시간표 열기 & 편집" onclick="openScheduleEditor('${schedule.id}')">
+          ▶
+        </button>
+
+        <div class="card-info-meta">
+          <div class="card-status-line">
+            <span>⏱️ ${schedule.duration || "00:20:17"}</span>
+            <span>|</span>
+            <span class="card-status-badge">🟢 ${schedule.status || "Completed"}</span>
+          </div>
+          <div>Start: ${schedule.startTime || "2026/08/28 16:40:56 PM"}</div>
+          <div>End: ${schedule.endTime || "2026/08/28 17:01:13 PM"}</div>
+        </div>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="card-progress-container" title="계획 진행률 ${stats.fillPercentage}%">
+        <div class="card-progress-bar" style="width: ${stats.fillPercentage}%;"></div>
+      </div>
+
+      <!-- Bottom Badges / Metrics -->
+      <div class="card-stats-footer">
+        <div class="stat-pill-group">
+          <div class="stat-pill-label">
+            <span style="color:var(--g-success);">✔</span> Completed
+          </div>
+          <div class="stat-pill-value">${stats.completedCount.toLocaleString()}</div>
+        </div>
+
+        <div class="stat-pill-group">
+          <div class="stat-pill-label">
+            <span style="color:var(--g-warning);">!</span> Warning
+          </div>
+          <div class="stat-pill-value">${stats.warningCount}</div>
+        </div>
+
+        <div class="stat-pill-group">
+          <div class="stat-pill-label">
+            <span style="color:var(--g-danger);">✖</span> Failed
+          </div>
+          <div class="stat-pill-value">${stats.failedCount}</div>
+        </div>
+
+        <div class="stat-pill-group">
+          <div class="stat-pill-label">
+            <span style="color:var(--g-blue);">▶</span> Skipped
+          </div>
+          <div class="stat-pill-value">${stats.skippedCount.toLocaleString()}</div>
+        </div>
+
+        <div class="stat-pill-group">
+          <div class="stat-pill-label">
+            <span style="color:var(--g-text-muted);">🔍</span> Crawled
+          </div>
+          <div class="stat-pill-value">${stats.crawledCount}</div>
+        </div>
+      </div>
+    `;
+
+    grid.appendChild(card);
+  });
+}
+
+// Window actions for cards
+window.openScheduleEditor = function(id) {
+  const schedule = getScheduleById(id);
+  if (!schedule) return;
+
+  currentScheduleId = schedule.id;
+  items = (schedule.items || []).map((item, idx) => normalizeItem(item, idx));
+  $("schedule-title").value = schedule.title || "나의 일주일 시간표";
+  
+  showEditorView();
+  renderList();
+  renderSchedule();
+};
+
+window.toggleCardMenu = function(event, id) {
+  event.stopPropagation();
+  const choice = prompt("원하시는 작업을 선택하세요:\n1. 📋 복제하기 (Duplicate)\n2. 🗑️ 삭제하기 (Delete)\n3. ✏️ 이름 변경 (Rename)", "1");
+  if (choice === "1") {
+    duplicateSchedule(id);
+  } else if (choice === "2") {
+    deleteSchedule(id);
+  } else if (choice === "3") {
+    renameSchedule(id);
+  }
+};
+
+function duplicateSchedule(id) {
+  const schedule = getScheduleById(id);
+  if (!schedule) return;
+
+  const newSchedule = JSON.parse(JSON.stringify(schedule));
+  newSchedule.id = "sched-" + Date.now();
+  newSchedule.title = schedule.title + " (사본)";
+  newSchedule.updatedAt = new Date().toISOString();
+  allSchedules.unshift(newSchedule);
+  saveHubSchedules();
+  renderDashboard();
+  alert(`'${newSchedule.title}' 이 복제되어 보관함에 추가되었습니다.`);
+}
+
+function deleteSchedule(id) {
+  if (allSchedules.length <= 1) {
+    alert("최소 1개의 시간표는 유지되어야 합니다.");
+    return;
+  }
+  const schedule = getScheduleById(id);
+  if (!confirm(`'${schedule.title}' 시간표를 삭제하시겠습니까?`)) return;
+
+  allSchedules = allSchedules.filter(s => s.id !== id);
+  saveHubSchedules();
+  renderDashboard();
+}
+
+function renameSchedule(id) {
+  const schedule = getScheduleById(id);
+  if (!schedule) return;
+
+  const newTitle = prompt("새 시간표 제목을 입력하세요:", schedule.title);
+  if (newTitle && newTitle.trim()) {
+    schedule.title = newTitle.trim();
+    schedule.updatedAt = new Date().toISOString();
+    saveHubSchedules();
+    renderDashboard();
+  }
+}
+
+function createNewSchedule() {
+  const newId = "sched-" + Date.now();
+  const newTitle = "새 시간표 " + (allSchedules.length + 1);
+  const newSchedule = {
+    id: newId,
+    title: newTitle,
+    sourceName: "New Schedule",
+    targetName: "g.acmecorp.com",
+    icon: "🆕",
+    items: [],
+    dataSize: "0GB",
+    duration: "00:00:00",
+    status: "Active",
+    startTime: new Date().toLocaleDateString(),
+    endTime: "-",
+    completedCount: 0,
+    warningCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    crawledCount: 0,
+    progressPercent: 0,
+    updatedAt: new Date().toISOString()
+  };
+
+  allSchedules.unshift(newSchedule);
+  saveHubSchedules();
+  openScheduleEditor(newId);
+}
+
+// Navigation View Switchers
+function showDashboardView() {
+  $("view-dashboard").style.display = "block";
+  $("view-editor").style.display = "none";
+  $("nav-dashboard").classList.add("active");
+  $("nav-editor").classList.remove("active");
+  renderDashboard();
+}
+
+function showEditorView() {
+  $("view-dashboard").style.display = "none";
+  $("view-editor").style.display = "block";
+  $("nav-dashboard").classList.remove("active");
+  $("nav-editor").classList.add("active");
+}
+
+function syncCurrentScheduleToHub() {
+  const current = getScheduleById(currentScheduleId);
+  if (current) {
+    current.title = $("schedule-title").value || "나의 일주일 시간표";
+    current.items = items;
+    current.updatedAt = new Date().toISOString();
+    saveHubSchedules();
+  }
+}
+
+// ==========================================
+// SVG Circular Renderer
+// ==========================================
+function hourToAngle(hour) {
+  const clamped = Math.max(START_HOUR, Math.min(START_HOUR + TOTAL_HOURS, hour));
+  const fraction = (clamped - START_HOUR) / TOTAL_HOURS;
+  return -90 + fraction * 360;
+}
+
+function polarToXY(cx, cy, r, angleDeg) {
+  const rad = (angleDeg * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function annularSectorPath(cx, cy, rIn, rOut, aStart, aEnd) {
+  let angleSpan = aEnd - aStart;
+  if (angleSpan < 0) angleSpan += 360;
+  if (angleSpan >= 359.99) angleSpan = 359.99;
+
+  const startRad = (aStart * Math.PI) / 180;
+  const endRad = ((aStart + angleSpan) * Math.PI) / 180;
+
+  const p1 = { x: cx + rOut * Math.cos(startRad), y: cy + rOut * Math.sin(startRad) };
+  const p2 = { x: cx + rOut * Math.cos(endRad), y: cy + rOut * Math.sin(endRad) };
+  const p3 = { x: cx + rIn * Math.cos(endRad), y: cy + rIn * Math.sin(endRad) };
+  const p4 = { x: cx + rIn * Math.cos(startRad), y: cy + rIn * Math.sin(startRad) };
+
+  const largeArc = angleSpan > 180 ? 1 : 0;
+  return `M ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} A ${rOut} ${rOut} 0 ${largeArc} 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)} L ${p3.x.toFixed(2)} ${p3.y.toFixed(2)} A ${rIn} ${rIn} 0 ${largeArc} 0 ${p4.x.toFixed(2)} ${p4.y.toFixed(2)} Z`;
+}
+
+function svgEl(tag, attrs = {}) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  Object.entries(attrs).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) el.setAttribute(k, v);
   });
   return el;
-}
-
-function createArcPath(startH, endH, innerDay, outerDay) {
-  const rIn = INNER_BASE_R + innerDay * LAYER_WIDTH;
-  const rOut = INNER_BASE_R + outerDay * LAYER_WIDTH;
-  let thetaStart = hourToTheta(startH);
-  let thetaEnd = hourToTheta(endH);
-  if (thetaEnd <= thetaStart) thetaEnd = thetaStart + 0.02;
-
-  const fullCircle = thetaEnd - thetaStart >= 2 * Math.PI - 1e-6;
-  if (fullCircle) thetaEnd = thetaStart + Math.PI * 2 - 0.001;
-
-  const p1 = polarToCartesian(thetaStart, rIn);
-  const p2 = polarToCartesian(thetaStart, rOut);
-  const p3 = polarToCartesian(thetaEnd, rOut);
-  const p4 = polarToCartesian(thetaEnd, rIn);
-  const deltaTheta = thetaEnd - thetaStart;
-  const largeArc = deltaTheta > Math.PI ? 1 : 0;
-
-  return `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y} A ${rOut} ${rOut} 0 ${largeArc} 1 ${p3.x} ${p3.y} L ${p4.x} ${p4.y} A ${rIn} ${rIn} 0 ${largeArc} 0 ${p1.x} ${p1.y} Z`;
-}
-
-function drawBaseGrid(svg) {
-  svg.appendChild(svgEl("rect", {
-    x: 0, y: 0, width: 600, height: 600, fill: "#ffffff"
-  }));
-
-  for (let i = 0; i <= 7; i += 1) {
-    svg.appendChild(svgEl("circle", {
-      cx: CX,
-      cy: CY,
-      r: INNER_BASE_R + i * LAYER_WIDTH,
-      fill: "none",
-      stroke: "#edf2f7",
-      "stroke-width": "1"
-    }));
-  }
-
-  for (let i = 0; i < 7; i += 1) {
-    const rMid = INNER_BASE_R + (i + 0.5) * LAYER_WIDTH;
-    const pos = polarToCartesian(hourToTheta(START_HOUR) - 0.18, rMid);
-    const label = svgEl("text", {
-      x: pos.x,
-      y: pos.y,
-      fill: "#868e96",
-      "font-size": "11",
-      "font-weight": "700",
-      "font-family": "Noto Sans KR, sans-serif",
-      "text-anchor": "middle",
-      "dominant-baseline": "central"
-    });
-    label.textContent = DAY_SHORT[i];
-    svg.appendChild(label);
-  }
-
-  const outerR = INNER_BASE_R + 7 * LAYER_WIDTH;
-  for (let i = 0; i < TOTAL_HOURS; i += 1) {
-    const hour = START_HOUR + i;
-    const theta = hourToTheta(hour);
-    const inP = polarToCartesian(theta, INNER_BASE_R);
-    const outP = polarToCartesian(theta, outerR);
-    const labelP = polarToCartesian(theta, outerR + 18);
-
-    svg.appendChild(svgEl("line", {
-      x1: inP.x, y1: inP.y, x2: outP.x, y2: outP.y,
-      stroke: "#dee2e6",
-      "stroke-dasharray": "2 2"
-    }));
-
-    const tick = svgEl("text", {
-      x: labelP.x,
-      y: labelP.y,
-      fill: "#868e96",
-      "font-size": "12",
-      "font-weight": "600",
-      "font-family": "Noto Sans KR, sans-serif",
-      "text-anchor": "middle",
-      "dominant-baseline": "central"
-    });
-    tick.textContent = `${hour}시`;
-    svg.appendChild(tick);
-  }
 }
 
 function renderSchedule() {
   const svg = $("schedule-svg");
   if (!svg) return;
   svg.innerHTML = "";
-  drawBaseGrid(svg);
 
-  items.forEach((item) => {
-    consecutiveRanges(item.days).forEach((range) => {
+  const defs = svgEl("defs");
+  svg.appendChild(defs);
+
+  // Background Dial
+  for (let lvl = 0; lvl < 7; lvl += 1) {
+    const rIn = INNER_BASE_R + lvl * LAYER_WIDTH;
+    const rOut = rIn + LAYER_WIDTH;
+    for (let h = 0; h < TOTAL_HOURS; h += 1) {
+      const a0 = hourToAngle(START_HOUR + h);
+      const a1 = hourToAngle(START_HOUR + h + 1);
+      const isEven = (lvl + h) % 2 === 0;
       const path = svgEl("path", {
-        d: createArcPath(item.start, item.end, range.start, range.end),
-        fill: item.color,
-        stroke: "#ffffff",
-        "stroke-width": "1.5",
-        opacity: "0.92",
-        style: "cursor:pointer"
-      });
-      path.addEventListener("click", (event) => {
-        event.stopPropagation();
-        selectItem(item);
+        d: annularSectorPath(CX, CY, rIn, rOut, a0, a1),
+        fill: isEven ? "#fafafa" : "#f1f3f4",
+        stroke: "#e8eaed",
+        "stroke-width": "0.5"
       });
       svg.appendChild(path);
+    }
+  }
 
-      const duration = item.end - item.start;
-      const band = range.end - range.start;
-      if (duration < 0.35 && band < 2) return;
+  // Activity Blocks
+  items.forEach((item, itemIdx) => {
+    const a0 = hourToAngle(item.start);
+    const a1 = hourToAngle(item.end);
+    const ranges = consecutiveRanges(item.days);
 
-      const midTheta = (hourToTheta(item.start) + hourToTheta(item.end)) / 2;
-      const midR = INNER_BASE_R + ((range.start + range.end) / 2) * LAYER_WIDTH;
-      const textPos = polarToCartesian(midTheta, midR);
-      const fontSize = Math.max(9, Math.min(15, 8 + band * 2.2));
-      const label = svgEl("text", {
-        x: textPos.x,
-        y: textPos.y,
-        fill: "#ffffff",
-        "font-size": String(fontSize),
-        "font-weight": "700",
-        "font-family": "Jua, Noto Sans KR, sans-serif",
-        "text-anchor": "middle",
-        "dominant-baseline": "central",
-        style: "pointer-events:none"
+    ranges.forEach((range) => {
+      const rIn = INNER_BASE_R + range.start * LAYER_WIDTH + 1;
+      const rOut = INNER_BASE_R + range.end * LAYER_WIDTH - 1;
+      const pathD = annularSectorPath(CX, CY, rIn, rOut, a0, a1);
+
+      const path = svgEl("path", {
+        d: pathD,
+        fill: item.color || "#FF6B6B",
+        stroke: selectedItemId === item.id ? "#1a73e8" : "rgba(0,0,0,0.15)",
+        "stroke-width": selectedItemId === item.id ? "3" : "1",
+        cursor: "pointer",
+        class: "activity-block"
       });
-      label.textContent = item.title;
-      svg.appendChild(label);
+
+      path.addEventListener("click", () => selectItem(item.id));
+      svg.appendChild(path);
+
+      // Label
+      const midAngle = a0 + (a1 - a0) / 2;
+      const midR = (rIn + rOut) / 2;
+      const pos = polarToXY(CX, CY, midR, midAngle);
+
+      const text = svgEl("text", {
+        x: pos.x,
+        y: pos.y + 4,
+        fill: "#ffffff",
+        "font-size": range.end - range.start > 1 ? "13" : "11",
+        "font-weight": "700",
+        "font-family": "Noto Sans KR, sans-serif",
+        "text-anchor": "middle",
+        "pointer-events": "none"
+      });
+      text.textContent = item.title;
+      svg.appendChild(text);
     });
   });
+
+  // Center Circle
+  const centerCircle = svgEl("circle", {
+    cx: CX,
+    cy: CY,
+    r: INNER_BASE_R - 2,
+    fill: "#ffffff",
+    stroke: "#dadce0",
+    "stroke-width": "2"
+  });
+  svg.appendChild(centerCircle);
+
+  const centerText = svgEl("text", {
+    x: CX,
+    y: CY - 6,
+    fill: "#1a73e8",
+    "font-size": "14",
+    "font-weight": "700",
+    "text-anchor": "middle"
+  });
+  centerText.textContent = "월~일";
+  svg.appendChild(centerText);
+
+  const centerSub = svgEl("text", {
+    x: CX,
+    y: CY + 14,
+    fill: "#5f6368",
+    "font-size": "11",
+    "text-anchor": "middle"
+  });
+  centerSub.textContent = "9시~21시";
+  svg.appendChild(centerSub);
+
+  // Hour Labels around circle
+  for (let h = 0; h <= TOTAL_HOURS; h += 1) {
+    const angle = hourToAngle(START_HOUR + h);
+    const pos = polarToXY(CX, CY, INNER_BASE_R + 7 * LAYER_WIDTH + 14, angle);
+    const hourLabel = svgEl("text", {
+      x: pos.x,
+      y: pos.y + 4,
+      fill: "#3c4043",
+      "font-size": "11",
+      "font-weight": "700",
+      "text-anchor": "middle"
+    });
+    hourLabel.textContent = `${START_HOUR + h}시`;
+    svg.appendChild(hourLabel);
+  }
+}
+
+function selectItem(id) {
+  selectedItemId = id;
+  const item = items.find(it => it.id === id);
+  const detailCard = $("detail-card");
+  const detailText = $("detail-text");
+
+  if (item && detailCard && detailText) {
+    detailCard.style.display = "flex";
+    detailText.innerHTML = `<strong>${escapeHtml(item.title)}</strong> (${formatDaysLabel(item.days)}, ${decToTimeStr(item.start)} ~ ${decToTimeStr(item.end)})`;
+  }
+  renderList();
+  renderSchedule();
 }
 
 function renderList() {
-  const listUi = $("schedule-list-ui");
-  $("count-badge").textContent = String(items.length);
-  listUi.innerHTML = "";
+  const ul = $("schedule-list-ui");
+  const badge = $("count-badge");
+  if (!ul) return;
+
+  ul.innerHTML = "";
+  if (badge) badge.textContent = items.length;
 
   if (!items.length) {
-    const emptyLi = document.createElement("li");
-    emptyLi.className = "schedule-item-empty";
-    emptyLi.textContent = "등록된 활동이 없습니다. 위 폼에서 등록하거나 ‘원본 예시 불러오기’를 눌러 보세요.";
-    listUi.appendChild(emptyLi);
+    ul.innerHTML = '<li class="schedule-item-empty">등록된 활동이 없습니다.</li>';
     return;
   }
 
-  items.forEach((item, index) => {
+  items.forEach((item, idx) => {
     const li = document.createElement("li");
-    li.className = "schedule-item" + (item.id === selectedItemId ? " selected" : "");
+    li.className = "schedule-item" + (selectedItemId === item.id ? " selected" : "");
     li.innerHTML = `
       <div class="item-info">
-        <span class="item-index">${index + 1}</span>
-        <span class="badge" style="background:${escapeHtml(item.color)};"></span>
-        <span class="day-tag">${escapeHtml(formatDaysLabel(item.days))}</span>
-        <strong class="item-title">${escapeHtml(item.title)}</strong>
-        <span class="item-time">(${escapeHtml(decToTimeStr(item.start))} ~ ${escapeHtml(decToTimeStr(item.end))})</span>
+        <span class="item-index">${idx + 1}</span>
+        <span class="badge" style="background:${item.color};"></span>
+        <span class="day-tag">${formatDaysLabel(item.days)}</span>
+        <span class="item-title">${escapeHtml(item.title)}</span>
+        <span class="item-time">(${decToTimeStr(item.start)}~${decToTimeStr(item.end)})</span>
       </div>
-      <button type="button" class="btn btn-sm btn-delete-item" data-id="${escapeHtml(item.id)}">삭제</button>
+      <button type="button" class="btn-delete-item" onclick="event.stopPropagation(); deleteItem('${item.id}');">삭제</button>
     `;
-    li.querySelector(".btn-delete-item").addEventListener("click", (event) => {
-      event.stopPropagation();
-      deleteItem(item.id);
-    });
-    li.addEventListener("click", () => selectItem(item));
-    listUi.appendChild(li);
+    li.addEventListener("click", () => selectItem(item.id));
+    ul.appendChild(li);
   });
 }
 
-function refresh() {
+function deleteItem(id) {
+  items = items.filter(it => it.id !== id);
+  if (selectedItemId === id) {
+    selectedItemId = null;
+    $("detail-card").style.display = "none";
+  }
   saveLocal();
   renderList();
   renderSchedule();
 }
 
 function saveLocal() {
-  safeStorageSet(STORAGE_KEY, JSON.stringify(items));
-  const titleEl = $("schedule-title");
-  if (titleEl) safeStorageSet(TITLE_STORAGE_KEY, titleEl.value);
-}
-
-function selectItem(item) {
-  selectedItemId = item.id;
-  const detailCard = $("detail-card");
-  $("detail-text").innerHTML = `<strong>[${escapeHtml(formatDaysLabel(item.days))}] ${escapeHtml(item.title)}</strong> (${escapeHtml(decToTimeStr(item.start))} ~ ${escapeHtml(decToTimeStr(item.end))})`;
-  detailCard.style.display = "flex";
-  renderList();
-}
-
-function fillForm(item) {
-  $("input-title").value = item.title;
-  setTimeRange(item.start, item.end);
-  $("input-color").value = item.color;
-  $("color-hex").textContent = item.color;
-  setSelectedDays(item.days);
-  updateSwatchState();
-}
-
-function setEditMode(item) {
-  editingId = item ? item.id : null;
-  $("form-heading").textContent = item ? "✏️ 활동 수정하기" : "➕ 활동 등록하기";
-  $("btn-submit-activity").textContent = item ? "저장" : "➕ 시간표에 등록";
-  $("btn-cancel-edit").style.display = item ? "inline-block" : "none";
-  if (item) fillForm(item);
-}
-
-function deleteItem(id) {
-  items = items.filter((it) => it.id !== id);
-  if (selectedItemId === id) {
-    $("detail-card").style.display = "none";
-    selectedItemId = null;
-  }
-  if (editingId === id) setEditMode(null);
-  refresh();
-}
-
-function getSelectedDays() {
-  return [...document.querySelectorAll(".day-chip.active")].map((btn) => Number(btn.dataset.day));
-}
-
-function setSelectedDays(days) {
-  const selected = new Set(uniqueSortedDays(days));
-  document.querySelectorAll(".day-chip").forEach((btn) => {
-    btn.classList.toggle("active", selected.has(Number(btn.dataset.day)));
-  });
-}
-
-function readFormItem(existingId) {
-  const title = $("input-title").value.trim();
-  const start = minsToDec(startMinutes);
-  const end = minsToDec(endMinutes);
-  const days = uniqueSortedDays(getSelectedDays());
-  const color = $("input-color").value || "#FF6B6B";
-
-  if (!title) return { error: "활동명을 입력해주세요." };
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return { error: "시작/종료 시간을 확인해주세요." };
-  if (start >= end) return { error: "종료 시간은 시작 시간보다 늦어야 합니다." };
-  if (start < START_HOUR || end > START_HOUR + TOTAL_HOURS) {
-    return { error: `시간은 ${START_HOUR}시부터 ${START_HOUR + TOTAL_HOURS}시 사이여야 합니다.` };
-  }
-  if (!days.length) return { error: "요일을 하나 이상 선택해주세요." };
-
-  return {
-    item: normalizeItem({
-      id: existingId || `item-${Date.now()}`,
-      title,
-      start,
-      end,
-      days,
-      color
-    })
-  };
-}
-
-function loadSample() {
-  if (items.length && !confirm("현재 시간표를 원본 예시(김연진 시간표)로 바꿀까요?")) return;
-  items = SAMPLE_ITEMS.map((item, idx) => normalizeItem({ ...item, id: `sample-${idx}` }, idx));
-  $("schedule-title").value = "김연진의 하루 시간표 (9시~21시)";
-  selectedItemId = null;
-  editingId = null;
-  $("detail-card").style.display = "none";
-  setEditMode(null);
-  refresh();
-}
-
-async function downloadAsPNG() {
-  renderSchedule();
-  const svg = $("schedule-svg");
-  const clone = svg.cloneNode(true);
-  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  clone.setAttribute("width", "1100");
-  clone.setAttribute("height", "1200");
-  clone.setAttribute("viewBox", "0 -70 600 690");
-
-  const title = $("schedule-title").value || "일주일 시간표";
-  const titleNode = svgEl("text", {
-    x: CX,
-    y: -32,
-    fill: "#212529",
-    "font-size": "22",
-    "font-weight": "700",
-    "font-family": "Noto Sans KR, sans-serif",
-    "text-anchor": "middle"
-  });
-  titleNode.textContent = title;
-  clone.insertBefore(titleNode, clone.firstChild);
-
-  const xml = new XMLSerializer().serializeToString(clone);
-  const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(xml)}`;
-
-  await document.fonts.ready.catch(() => {});
-  const image = new Image();
-  image.onload = () => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 1100;
-    canvas.height = 1200;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-
-    const now = new Date();
-    const timestamp = [
-      now.getFullYear(),
-      String(now.getMonth() + 1).padStart(2, "0"),
-      String(now.getDate()).padStart(2, "0"),
-      "_",
-      String(now.getHours()).padStart(2, "0"),
-      String(now.getMinutes()).padStart(2, "0"),
-      String(now.getSeconds()).padStart(2, "0")
-    ].join("");
-
-    const link = document.createElement("a");
-    link.href = canvas.toDataURL("image/png");
-    link.download = `schedule_${timestamp}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-  image.onerror = () => alert("이미지 저장에 실패했습니다. 브라우저에서 다시 시도해 주세요.");
-  image.src = url;
-}
-
-const SUPABASE_ESM_CANDIDATES = [
-  "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm",
-  "https://esm.sh/@supabase/supabase-js@2"
-];
-
-async function ensureSupabaseLibrary() {
-  if (window.supabase && typeof window.supabase.createClient === "function") return true;
-  for (const src of SUPABASE_ESM_CANDIDATES) {
-    try {
-      const mod = await import(src);
-      if (mod && typeof mod.createClient === "function") {
-        window.supabase = mod;
-        return true;
-      }
-    } catch (err) {
-      console.warn("Supabase ESM load failed", src, err);
-    }
-  }
-  return false;
-}
-
-async function initSupabase() {
-  try {
-    const res = await fetch("/api/config");
-    const { supabaseUrl, supabaseAnonKey } = await res.json();
-    if (!supabaseUrl || !supabaseAnonKey) {
-      console.warn("Supabase env missing: set SUPABASE_URL and SUPABASE_ANON_KEY on the server");
-      return;
-    }
-    const loaded = await ensureSupabaseLibrary();
-    if (!loaded) {
-      console.warn("Supabase JS library failed to load");
-      return;
-    }
-    supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) handleUserLogin(session.user);
-    supabase.auth.onAuthStateChange((_event, sessionState) => {
-      if (sessionState) handleUserLogin(sessionState.user);
-      else handleUserLogout();
-    });
-  } catch (err) {
-    console.warn("Local storage fallback mode", err);
-  }
-}
-
-function loadStoredItems() {
-  const raw = safeStorageGet(STORAGE_KEY) || LEGACY_STORAGE_KEYS.map(safeStorageGet).find(Boolean);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw).map(normalizeItem);
-  } catch (err) {
-    return [];
-  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  localStorage.setItem(TITLE_STORAGE_KEY, $("schedule-title").value);
+  syncCurrentScheduleToHub();
 }
 
 function loadLocalSchedule() {
-  items = loadStoredItems();
-  const savedTitle = safeStorageGet(TITLE_STORAGE_KEY) || LEGACY_TITLE_KEYS.map(safeStorageGet).find(Boolean);
-  if (savedTitle) $("schedule-title").value = savedTitle;
-}
-
-async function maybeLoadSharedSchedule() {
-  const path = window.location.pathname;
-  if (!path.startsWith("/s/") || !supabase) return;
-  const shareId = path.split("/s/")[1];
-  if (!shareId) return;
-  const { data, error } = await supabase.from("schedules").select("*").eq("id", shareId).single();
-  if (data && !error) {
-    currentScheduleId = data.id;
-    $("schedule-title").value = data.title || "나의 일주일 시간표 (9시 ~ 21시)";
-    items = (data.items || []).map(normalizeItem);
+  loadHubSchedules();
+  const schedule = getScheduleById(currentScheduleId);
+  if (schedule) {
+    items = (schedule.items || []).map((it, idx) => normalizeItem(it, idx));
+    $("schedule-title").value = schedule.title || "나의 일주일 시간표 (9시 ~ 21시)";
   }
 }
 
-function updateSwatchState() {
-  const current = $("input-color").value.toLowerCase();
-  document.querySelectorAll(".swatch").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.color.toLowerCase() === current);
+function getSelectedDays() {
+  const chips = document.querySelectorAll(".day-chip.active");
+  return Array.from(chips).map(c => Number(c.dataset.day));
+}
+
+function setSelectedDays(days) {
+  const chips = document.querySelectorAll(".day-chip");
+  chips.forEach(chip => {
+    const day = Number(chip.dataset.day);
+    chip.classList.toggle("active", days.includes(day));
   });
 }
 
 function setupColorSwatches() {
-  const host = $("color-swatches");
-  host.innerHTML = "";
-  PALETTE.forEach((color) => {
+  const container = $("color-swatches");
+  if (!container) return;
+  container.innerHTML = "";
+
+  PALETTE.forEach(color => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "swatch";
-    btn.style.background = color;
-    btn.dataset.color = color;
-    btn.setAttribute("aria-label", color);
+    btn.style.backgroundColor = color;
     btn.addEventListener("click", () => {
       $("input-color").value = color;
       $("color-hex").textContent = color;
-      updateSwatchState();
+      document.querySelectorAll(".swatch").forEach(s => s.classList.remove("active"));
+      btn.classList.add("active");
     });
-    host.appendChild(btn);
+    container.appendChild(btn);
   });
-  updateSwatchState();
-}
-
-let isListExpanded = false;
-
-function setListExpanded(expanded) {
-  isListExpanded = Boolean(expanded);
-  const listUi = $("schedule-list-ui");
-  const toggleBtn = $("activity-list-toggle");
-  const icon = $("activity-list-icon");
-  const card = $("activity-list-card");
-
-  if (listUi) listUi.style.display = isListExpanded ? "flex" : "none";
-  if (toggleBtn) toggleBtn.setAttribute("aria-expanded", String(isListExpanded));
-  if (icon) icon.textContent = isListExpanded ? "▲ 접기" : "▼ 펼치기";
-  if (card) card.classList.toggle("expanded", isListExpanded);
 }
 
 function setupEvents() {
-  const listToggle = $("activity-list-toggle");
-  if (listToggle) {
-    listToggle.addEventListener("click", () => {
-      setListExpanded(!isListExpanded);
-    });
-    listToggle.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        setListExpanded(!isListExpanded);
-      }
-    });
-  }
+  // Navigation
+  $("nav-dashboard").addEventListener("click", showDashboardView);
+  $("nav-editor").addEventListener("click", showEditorView);
+  $("nav-push").addEventListener("click", () => $("btn-open-push-modal").click());
+  $("btn-back-to-dashboard").addEventListener("click", showDashboardView);
 
-  document.querySelectorAll(".day-chip").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      btn.classList.toggle("active");
+  $("btn-sidebar-new").addEventListener("click", createNewSchedule);
+  $("btn-fab-new-schedule").addEventListener("click", createNewSchedule);
+  $("btn-sidebar-sample").addEventListener("click", () => {
+    items = SAMPLE_ITEMS.map((item, idx) => normalizeItem({ ...item, id: `sample-${idx}` }, idx));
+    saveLocal();
+    renderList();
+    renderSchedule();
+    showEditorView();
+  });
+
+  // Filter chips
+  const filterChips = document.querySelectorAll(".g-filter-chip");
+  filterChips.forEach(chip => {
+    chip.addEventListener("click", () => {
+      filterChips.forEach(c => c.classList.remove("active"));
+      chip.classList.add("active");
+      currentFilter = chip.dataset.filter || "all";
+      renderDashboard();
     });
   });
 
+  // Days chips toggle
+  const dayChips = document.querySelectorAll(".day-chip");
+  dayChips.forEach(chip => {
+    chip.addEventListener("click", () => {
+      chip.classList.toggle("active");
+    });
+  });
+
+  // Activity Form Submit
   $("add-form").addEventListener("submit", (event) => {
     event.preventDefault();
-    const { item, error } = readFormItem(editingId);
-    if (error) {
-      alert(error);
-      return;
-    }
+    const title = $("input-title").value.trim();
+    const start = minsToDec(startMinutes);
+    const end = minsToDec(endMinutes);
+    const days = uniqueSortedDays(getSelectedDays());
+    const color = $("input-color").value || "#FF6B6B";
+
+    if (!title) return alert("활동명을 입력하세요.");
+    if (!days.length) return alert("요일을 하나 이상 선택하세요.");
+
     if (editingId) {
-      items = items.map((it) => (it.id === editingId ? item : it));
-      selectedItemId = item.id;
-      setEditMode(null);
+      const idx = items.findIndex(it => it.id === editingId);
+      if (idx >= 0) {
+        items[idx] = normalizeItem({ id: editingId, title, start, end, days, color });
+      }
+      editingId = null;
+      $("btn-submit-activity").textContent = "➕ 시간표에 등록";
+      $("btn-cancel-edit").style.display = "none";
     } else {
-      items.push(item);
-      $("input-title").value = "";
-      $("input-title").focus();
+      items.push(normalizeItem({ id: `item-${Date.now()}`, title, start, end, days, color }));
     }
-    setListExpanded(true);
-    refresh();
-    if (selectedItemId) {
-      const current = items.find((it) => it.id === selectedItemId);
-      if (current) selectItem(current);
-    }
+
+    $("input-title").value = "";
+    saveLocal();
+    renderList();
+    renderSchedule();
   });
 
-  $("btn-cancel-edit").addEventListener("click", () => setEditMode(null));
-  $("btn-render").addEventListener("click", () => renderSchedule());
-  $("btn-load-sample").addEventListener("click", loadSample);
-  $("btn-download-png").addEventListener("click", () => {
-    downloadAsPNG();
+  $("btn-cancel-edit").addEventListener("click", () => {
+    editingId = null;
+    $("input-title").value = "";
+    $("btn-submit-activity").textContent = "➕ 시간표에 등록";
+    $("btn-cancel-edit").style.display = "none";
   });
 
-  $("btn-clear-schedule").addEventListener("click", () => {
-    if (!items.length) {
-      alert("이미 시간표가 비어 있습니다.");
-      return;
-    }
-    if (!confirm("현재 시간표의 모든 활동을 삭제하고 비우시겠습니까?")) return;
-    items = [];
-    selectedItemId = null;
-    $("detail-card").style.display = "none";
-    setEditMode(null);
-    refresh();
+  $("detail-edit-btn").addEventListener("click", () => {
+    const item = items.find(it => it.id === selectedItemId);
+    if (!item) return;
+
+    editingId = item.id;
+    $("input-title").value = item.title;
+    setTimeDropdownsFromDec(item.start, item.end);
+    setSelectedDays(item.days);
+    $("input-color").value = item.color;
+    $("color-hex").textContent = item.color;
+    $("btn-submit-activity").textContent = "💾 수정 완료";
+    $("btn-cancel-edit").style.display = "inline-block";
   });
 
-  $("btn-delete-cloud-schedule").addEventListener("click", async () => {
-    if (!supabase || !currentUser) return;
-    const sel = $("cloud-schedule-select");
-    const selectedId = sel.value;
-    if (!selectedId) {
-      alert("삭제할 클라우드 시간표를 먼저 선택해주세요.");
-      return;
-    }
-    const selectedTitle = sel.options[sel.selectedIndex]?.textContent || "선택한 시간표";
-    if (!confirm(`'${selectedTitle}' 시간표를 클라우드에서 정말 삭제하시겠습니까?`)) return;
-
-    const { error } = await supabase.from("schedules").delete().eq("id", selectedId).eq("user_id", currentUser.id);
-    if (error) {
-      alert("클라우드 시간표 삭제 실패: " + error.message);
-      return;
-    }
-    alert("클라우드 시간표가 삭제되었습니다.");
-    if (currentScheduleId === selectedId) {
-      currentScheduleId = null;
-      window.history.pushState(null, "", "/");
-    }
-    await loadUserSchedules();
-  });
-
-  $("input-color").addEventListener("input", (event) => {
-    $("color-hex").textContent = event.target.value;
-    updateSwatchState();
-  });
-  $("schedule-title").addEventListener("input", () => saveLocal());
   $("detail-delete-btn").addEventListener("click", () => {
     if (selectedItemId) deleteItem(selectedItemId);
   });
-  $("detail-edit-btn").addEventListener("click", () => {
-    const item = items.find((it) => it.id === selectedItemId);
-    if (item) setEditMode(item);
+
+  $("btn-render").addEventListener("click", () => {
+    renderSchedule();
+    renderList();
   });
 
+  $("btn-load-sample").addEventListener("click", () => {
+    items = SAMPLE_ITEMS.map((item, idx) => normalizeItem({ ...item, id: `sample-${idx}` }, idx));
+    saveLocal();
+    renderList();
+    renderSchedule();
+  });
+
+  $("btn-clear-schedule").addEventListener("click", () => {
+    if (confirm("시간표의 모든 활동을 지울까요?")) {
+      items = [];
+      selectedItemId = null;
+      $("detail-card").style.display = "none";
+      saveLocal();
+      renderList();
+      renderSchedule();
+    }
+  });
+
+  $("activity-list-toggle").addEventListener("click", () => {
+    const list = $("schedule-list-ui");
+    const icon = $("activity-list-icon");
+    const isHidden = list.style.display === "none";
+    list.style.display = isHidden ? "flex" : "none";
+    icon.textContent = isHidden ? "▲ 접기" : "▼ 펼치기";
+  });
+
+  $("schedule-title").addEventListener("input", saveLocal);
+
+  // Share
   $("btn-share").addEventListener("click", async () => {
     if (!supabase) {
-      alert("Supabase 연결이 설정되지 않았습니다. (.env 의 SUPABASE_URL / SUPABASE_ANON_KEY 확인)");
+      alert("Supabase 클라우드가 연결되어 있지 않습니다.");
       return;
     }
     const res = await fetch("/api/generate-id");
@@ -830,10 +1038,7 @@ function setupEvents() {
       items,
       is_public: true
     });
-    if (error) {
-      alert("공유 링크 생성 실패: " + error.message);
-      return;
-    }
+    if (error) return alert("공유 링크 생성 실패: " + error.message);
     $("share-url-input").value = `${window.location.origin}/s/${id}`;
     $("share-modal").style.display = "flex";
   });
@@ -844,25 +1049,26 @@ function setupEvents() {
     try {
       await navigator.clipboard.writeText(input.value);
       alert("공유 링크가 복사되었습니다!");
-    } catch (err) {
+    } catch (e) {
       document.execCommand("copy");
       alert("공유 링크가 복사되었습니다!");
     }
   });
+
   $("btn-close-share").addEventListener("click", () => {
     $("share-modal").style.display = "none";
   });
 
+  // Auth Modals
   $("btn-login-modal").addEventListener("click", () => {
-    if (!supabase) {
-      alert("Supabase 연결이 설정되지 않았습니다. 로컬 저장만 사용할 수 있습니다.");
-      return;
-    }
+    if (!supabase) return alert("Supabase 연결이 설정되지 않았습니다.");
     $("auth-modal").style.display = "flex";
   });
+
   $("btn-close-auth").addEventListener("click", () => {
     $("auth-modal").style.display = "none";
   });
+
   $("btn-do-login").addEventListener("click", async () => {
     if (!supabase) return;
     const email = $("auth-email").value;
@@ -871,6 +1077,7 @@ function setupEvents() {
     if (error) alert("로그인 실패: " + error.message);
     else $("auth-modal").style.display = "none";
   });
+
   $("btn-do-signup").addEventListener("click", async () => {
     if (!supabase) return;
     const email = $("auth-email").value;
@@ -879,31 +1086,12 @@ function setupEvents() {
     if (error) alert("가입 실패: " + error.message);
     else alert("가입 완료! 자동 로그인되었습니다.");
   });
+
   $("btn-logout").addEventListener("click", async () => {
     if (supabase) await supabase.auth.signOut();
   });
-  $("btn-cloud-save").addEventListener("click", async () => {
-    if (!currentUser || !supabase) return;
-    const title = $("schedule-title").value;
-    const res = await fetch("/api/generate-id");
-    const { id } = await res.json();
-    const { error } = await supabase.from("schedules").insert({
-      id,
-      user_id: currentUser.id,
-      title,
-      items,
-      is_public: true
-    });
-    if (error) alert("저장 실패: " + error.message);
-    else {
-      alert("클라우드에 안전하게 저장되었습니다!");
-      loadUserSchedules();
-    }
-  });
 
-  // ==========================================
-  // Pushwing Web Push 모달 및 이벤트 연결
-  // ==========================================
+  // Push Modal
   $("btn-open-push-modal").addEventListener("click", async () => {
     $("push-modal").style.display = "flex";
     const pushUserId = $("push-user-id");
@@ -918,25 +1106,36 @@ function setupEvents() {
     $("push-modal").style.display = "none";
   });
 
-  const selectAppEl = $("push-select-app");
-  if (selectAppEl) {
-    selectAppEl.addEventListener("change", (e) => {
-      const selectedKey = e.target.value;
-      if (selectedKey) {
-        localStorage.setItem("PUSH_SELECTED_APP_KEY", selectedKey);
-        if (pushwingClient) {
-          pushwingClient.appKey = selectedKey;
-        }
-        updatePushStatusUI();
-      }
+  // Push Subscribe / Test Push
+  let pushwingClient = null;
+  if (typeof PushwingClient !== "undefined") {
+    pushwingClient = new PushwingClient({
+      serverUrl: window.location.origin,
+      appKey: "demo-app-key-2026"
     });
   }
 
+  async function updatePushStatusUI() {
+    if (!pushwingClient) return;
+    try {
+      const status = await pushwingClient.getSubscriptionStatus();
+      const sup = $("push-stat-supported");
+      const perm = $("push-stat-permission");
+      const sub = $("push-stat-subscribed");
+      const btn = $("btn-toggle-push-sub");
+
+      if (sup) sup.textContent = status.supported ? "지원됨 (Yes)" : "미지원 (No)";
+      if (perm) perm.textContent = status.permission;
+      if (sub) sub.textContent = status.subscribed ? "구독 중 (Active)" : "미구독 (Inactive)";
+      if (btn) {
+        btn.textContent = status.subscribed ? "🔕 푸시 알림 구독 해제" : "🔔 웹 푸시 알림 받기 (구독)";
+        btn.className = status.subscribed ? "btn btn-outline-danger" : "btn btn-primary";
+      }
+    } catch (e) {}
+  }
+
   $("btn-toggle-push-sub").addEventListener("click", async () => {
-    if (!pushwingClient) {
-      alert("Pushwing 클라이언트를 로드할 수 없습니다.");
-      return;
-    }
+    if (!pushwingClient) return alert("Pushwing 클라이언트를 로드할 수 없습니다.");
     const selectedKey = $("push-select-app") ? $("push-select-app").value : "demo-app-key-2026";
     pushwingClient.appKey = selectedKey;
 
@@ -985,7 +1184,7 @@ function setupEvents() {
       const data = await res.json();
       if (data.success) {
         if (data.deliveredCount > 0) {
-          alert(`✅ [서버 전송 성공] 총 ${data.deliveredCount}대의 기기로 푸시가 성공적으로 전송되었습니다!\n\n💡 만약 화면 배너가 바로 뜨지 않는다면:\n1. 맥 화면 우측 상단 '제어 센터'에서 [집중 모드(방해 금지)]가 켜져 있는지 확인해 주세요.\n2. 맥 [시스템 설정 -> 알림 -> Chrome]에서 알림이 켜져 있는지 확인해 주세요.\n3. 맥 우측 상단 시계/날짜를 클릭하여 [알림 센터]를 확인해 보세요!`);
+          alert(`✅ [서버 전송 성공] 총 ${data.deliveredCount}대의 기기로 푸시가 성공적으로 전송되었습니다!\n\n💡 만약 화면 배너가 바로 뜨지 않는다면:\n1. 맥 화면 우측 상단 '제어 센터'에서 [집중 모드]가 켜져 있는지 확인해 주세요.\n2. 맥 [시스템 설정 -> 알림 -> Chrome]에서 알림 스타일이 '배너'인지 확인해 주세요.`);
         } else {
           alert(`[${selectedKey}] 키로 구독 중인 기기를 찾을 수 없습니다. 먼저 [🔔 웹 푸시 알림 받기]를 완료해 주세요.`);
         }
@@ -1003,29 +1202,39 @@ function setupEvents() {
   const btnTestLocal = $("btn-test-local-notify");
   if (btnTestLocal) {
     btnTestLocal.addEventListener("click", async () => {
-      if (typeof Notification === "undefined") {
-        alert("이 브라우저는 알림 기능을 지원하지 않습니다.");
-        return;
-      }
+      if (typeof Notification === "undefined") return alert("알림을 지원하지 않는 브라우저입니다.");
       let perm = Notification.permission;
-      if (perm !== "granted") {
-        perm = await Notification.requestPermission();
-      }
+      if (perm !== "granted") perm = await Notification.requestPermission();
       if (perm === "granted") {
-        try {
-          new Notification("⏰ [로컬 팝업 테스트] 정상 작동 중!", {
-            body: "이 팝업이 화면에 보이면 맥(Mac) OS와 브라우저 알림이 100% 정상 작동하는 상태입니다.",
-            requireInteraction: true
-          });
-          showInAppToast("⏰ [로컬 팝업 테스트] 알림 실행 완료!", "맥 화면 우측 상단 배너를 확인해 보세요.");
-        } catch (e) {
-          alert("로컬 알림 생성 실패: " + e.message);
-        }
+        new Notification("⏰ [로컬 팝업 테스트] 정상 작동 중!", {
+          body: "이 팝업이 화면에 보이면 맥(Mac) OS와 브라우저 알림이 100% 정상 작동하는 상태입니다.",
+          requireInteraction: true
+        });
+        showInAppToast("⏰ [로컬 팝업 테스트] 알림 실행 완료!", "맥 화면 우측 상단 배너를 확인해 보세요.");
       } else {
-        alert("알림 권한이 거부되어 있습니다. 브라우저 주소창 좌측 자물쇠(설정) 아이콘을 눌러 '알림: 허용'으로 변경해 주세요.");
+        alert("알림 권한이 거부되어 있습니다. 브라우저 설정에서 알림을 허용해 주세요.");
       }
     });
   }
+}
+
+async function loadAvailableApps() {
+  const selectApp = $("push-select-app");
+  if (!selectApp) return;
+
+  try {
+    const res = await fetch("/api/v1/apps");
+    const data = await res.json();
+    if (data.success && data.apps && data.apps.length > 0) {
+      selectApp.innerHTML = "";
+      data.apps.forEach(app => {
+        const opt = document.createElement("option");
+        opt.value = app.app_key;
+        opt.textContent = `${app.app_name} (${app.app_key})`;
+        selectApp.appendChild(opt);
+      });
+    }
+  } catch (e) {}
 }
 
 function showInAppToast(title, body) {
@@ -1033,7 +1242,7 @@ function showInAppToast(title, body) {
   if (!container) return;
 
   const toast = document.createElement("div");
-  toast.style.cssText = "background:#1e293b; color:#fff; border:1px solid #3b82f6; border-radius:10px; padding:14px 18px; box-shadow:0 10px 25px rgba(0,0,0,0.4); font-size:0.9rem; max-width:350px; pointer-events:auto;";
+  toast.style.cssText = "background:#1e293b; color:#fff; border:1px solid #1a73e8; border-radius:10px; padding:14px 18px; box-shadow:0 10px 25px rgba(0,0,0,0.4); font-size:0.9rem; max-width:350px; pointer-events:auto;";
   toast.innerHTML = `
     <div style="font-weight:bold; color:#60a5fa; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
       <span>🔔 ${title}</span>
@@ -1056,199 +1265,65 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-let pushwingClient = null;
-
-async function loadAvailableApps() {
-  const selectApp = $("push-select-app");
-  if (!selectApp) return;
-
+// Supabase Init
+async function initSupabase() {
   try {
-    const res = await fetch("/api/v1/apps");
-    const data = await res.json();
-    if (data.success && data.apps && data.apps.length > 0) {
-      const savedKey = localStorage.getItem("PUSH_SELECTED_APP_KEY") || "demo-app-key-2026";
-      selectApp.innerHTML = "";
-
-      data.apps.forEach((app) => {
-        const opt = document.createElement("option");
-        opt.value = app.app_key;
-        opt.textContent = `${app.app_name} (${app.app_key})`;
-        if (app.app_key === savedKey) opt.selected = true;
-        selectApp.appendChild(opt);
+    const configRes = await fetch("/api/config");
+    const { supabaseUrl, supabaseAnonKey } = await configRes.json();
+    if (supabaseUrl && supabaseAnonKey && window.supabase) {
+      supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) handleAuthChange(session.user);
+      supabase.auth.onAuthStateChange((_event, session) => {
+        handleAuthChange(session ? session.user : null);
       });
-
-      if (!selectApp.value && data.apps[0]) {
-        selectApp.value = data.apps[0].app_key;
-      }
-
-      if (pushwingClient) {
-        pushwingClient.appKey = selectApp.value;
-      }
     }
-  } catch (err) {
-    console.warn("Failed to load apps list:", err);
-  }
+  } catch (e) {}
 }
 
-async function initPushwing() {
-  const savedKey = localStorage.getItem("PUSH_SELECTED_APP_KEY") || "demo-app-key-2026";
-  if (typeof PushwingClient !== "undefined") {
-    pushwingClient = new PushwingClient({
-      serverUrl: window.location.origin,
-      appKey: savedKey,
-      swPath: "/sw.js",
-      scope: "/"
-    });
-  }
-  await loadAvailableApps();
-  await updatePushStatusUI();
-}
-
-async function updatePushStatusUI() {
-  const supportEl = $("push-stat-support");
-  const permEl = $("push-stat-permission");
-  const subEl = $("push-stat-subscribed");
-  const toggleBtn = $("btn-toggle-push-sub");
-
-  const isSupported = ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window);
-  if (supportEl) supportEl.textContent = isSupported ? "✅ 지원됨" : "❌ 미지원 (브라우저 확인)";
-
-  if (typeof Notification !== "undefined" && permEl) {
-    if (Notification.permission === "granted") permEl.textContent = "✅ 허용됨";
-    else if (Notification.permission === "denied") permEl.textContent = "🚫 거부됨 (설정에서 허용 필요)";
-    else permEl.textContent = "⏳ 미설정 (동의 필요)";
-  }
-
-  const selectApp = $("push-select-app");
-  const currentKey = (selectApp && selectApp.value) || localStorage.getItem("PUSH_SELECTED_APP_KEY") || "demo-app-key-2026";
-
-  if (!pushwingClient && typeof PushwingClient !== "undefined") {
-    pushwingClient = new PushwingClient({
-      serverUrl: window.location.origin,
-      appKey: currentKey,
-      swPath: "/sw.js",
-      scope: "/"
-    });
-  } else if (pushwingClient) {
-    pushwingClient.appKey = currentKey;
-  }
-
-  if (!pushwingClient) {
-    if (subEl) subEl.textContent = "⏳ 초기화 중...";
-    return;
-  }
-
-  try {
-    const status = await pushwingClient.getSubscriptionStatus();
-    if (supportEl) supportEl.textContent = status.supported ? "✅ 지원됨" : "❌ 미지원";
-    if (permEl) {
-      if (status.permission === "granted") permEl.textContent = "✅ 허용됨";
-      else if (status.permission === "denied") permEl.textContent = "🚫 거부됨 (설정에서 허용 필요)";
-      else permEl.textContent = "⏳ 미설정 (동의 필요)";
-    }
-    if (subEl) {
-      subEl.textContent = status.subscribed ? `🔔 [${currentKey}] 구독됨` : "🔕 미구독";
-      subEl.style.color = status.subscribed ? "var(--success)" : "var(--danger)";
-    }
-    if (toggleBtn) {
-      if (status.subscribed) {
-        toggleBtn.textContent = "🔕 푸시 알림 구독 해제";
-        toggleBtn.className = "btn btn-outline-danger";
-      } else {
-        toggleBtn.textContent = `🔔 [${currentKey}] 알림 받기 (구독)`;
-        toggleBtn.className = "btn btn-primary";
-      }
-    }
-  } catch (e) {
-    console.warn("Error updating push status UI:", e);
-  }
-}
-
-async function checkAdminAccess() {
-  const adminBtn = $("btn-admin-panel-link");
-  if (!adminBtn) return;
-  if (!supabase || !currentUser) {
-    adminBtn.style.display = "none";
-    return;
-  }
-
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session || !session.access_token) {
-      adminBtn.style.display = "none";
-      return;
-    }
-
-    const res = await fetch("/api/v1/auth/check-admin", {
-      headers: { Authorization: `Bearer ${session.access_token}` }
-    });
-    const result = await res.json();
-    if (result.success && result.isAdmin) {
-      adminBtn.style.display = "inline-flex";
-    } else {
-      adminBtn.style.display = "none";
-    }
-  } catch (e) {
-    adminBtn.style.display = "none";
-  }
-}
-
-function handleUserLogin(user) {
+async function handleAuthChange(user) {
   currentUser = user;
-  $("user-display").textContent = `👤 ${user.email}`;
-  $("btn-login-modal").style.display = "none";
-  $("btn-logout").style.display = "inline-block";
-  $("btn-cloud-save").style.display = "inline-block";
-  $("cloud-schedules-bar").style.display = "block";
-  const pushUserId = $("push-user-id");
-  if (pushUserId && user.email) {
-    pushUserId.value = user.email;
-  }
-  loadUserSchedules();
-  checkAdminAccess();
-}
+  const userDisplay = $("user-display");
+  const loginBtn = $("btn-login-modal");
+  const logoutBtn = $("btn-logout");
+  const cloudSaveBtn = $("btn-cloud-save");
+  const avatar = $("user-avatar");
 
-function handleUserLogout() {
-  currentUser = null;
-  $("user-display").textContent = "게스트 모드 (로컬 저장 중)";
-  $("btn-login-modal").style.display = "inline-block";
-  $("btn-logout").style.display = "none";
-  $("btn-cloud-save").style.display = "none";
-  $("cloud-schedules-bar").style.display = "none";
-  const delBtn = $("btn-delete-cloud-schedule");
-  if (delBtn) delBtn.style.display = "none";
-  const adminBtn = $("btn-admin-panel-link");
-  if (adminBtn) adminBtn.style.display = "none";
-}
-
-async function loadUserSchedules() {
-  if (!supabase || !currentUser) return;
-  const { data, error } = await supabase
-    .from("schedules")
-    .select("id, title")
-    .eq("user_id", currentUser.id)
-    .order("created_at", { ascending: false });
-
-  if (data && !error) {
-    const sel = $("cloud-schedule-select");
-    const delBtn = $("btn-delete-cloud-schedule");
-    sel.innerHTML = `<option value="">-- 내 클라우드 시간표 불러오기 (${data.length}개) --</option>`;
-    data.forEach((row) => {
-      const opt = document.createElement("option");
-      opt.value = row.id;
-      opt.textContent = row.title;
-      if (currentScheduleId === row.id) opt.selected = true;
-      sel.appendChild(opt);
-    });
-    if (delBtn) {
-      delBtn.style.display = sel.value ? "inline-block" : "none";
+  if (user) {
+    if (userDisplay) userDisplay.textContent = `${user.email} (클라우드 동기화)`;
+    if (loginBtn) loginBtn.style.display = "none";
+    if (logoutBtn) logoutBtn.style.display = "inline-block";
+    if (cloudSaveBtn) cloudSaveBtn.style.display = "inline-block";
+    if (avatar) {
+      avatar.textContent = user.email.charAt(0).toUpperCase();
+      avatar.title = user.email;
     }
-    sel.onchange = (event) => {
-      const id = event.target.value;
-      if (delBtn) delBtn.style.display = id ? "inline-block" : "none";
-      if (id) window.location.href = `/s/${id}`;
-    };
+    await checkAdminRole(user.id, user.email);
+  } else {
+    if (userDisplay) userDisplay.textContent = "게스트 모드 (로컬 저장 중)";
+    if (loginBtn) loginBtn.style.display = "inline-block";
+    if (logoutBtn) logoutBtn.style.display = "none";
+    if (cloudSaveBtn) cloudSaveBtn.style.display = "none";
+    if (avatar) {
+      avatar.textContent = "G";
+      avatar.title = "게스트 모드";
+    }
+    const adminBtn = $("btn-admin-panel-link");
+    if (adminBtn) adminBtn.style.display = "none";
   }
+}
+
+async function checkAdminRole(userId, email) {
+  if (email && email.toLowerCase() === "kimdongup@gmail.com") {
+    const adminBtn = $("btn-admin-panel-link");
+    if (adminBtn) adminBtn.style.display = "inline-flex";
+    return;
+  }
+  try {
+    const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId).maybeSingle();
+    const adminBtn = $("btn-admin-panel-link");
+    if (adminBtn) adminBtn.style.display = (data && data.role === "admin") ? "inline-flex" : "none";
+  } catch (e) {}
 }
 
 async function init() {
@@ -1256,13 +1331,10 @@ async function init() {
   setupColorSwatches();
   setupEvents();
   loadLocalSchedule();
+  renderDashboard();
   renderList();
   renderSchedule();
-  await initPushwing();
   await initSupabase();
-  await maybeLoadSharedSchedule();
-  renderList();
-  renderSchedule();
 }
 
 if (document.readyState === "loading") {

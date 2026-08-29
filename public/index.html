@@ -3,127 +3,224 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>원형 일주일 시간표 (9시 ~ 21시)</title>
+  <title>원형 시간표 관리 허브 | Circular Schedule Hub</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
 
-<div class="container">
-  <header class="top-nav card">
-    <div class="auth-box" id="auth-box">
-      <span id="user-display">게스트 모드 (로컬 저장 중)</span>
-      <div class="btn-group">
-        <button type="button" id="btn-open-push-modal" class="btn btn-sm btn-outline">🔔 푸시 알림</button>
-        <a href="/server-admin" id="btn-admin-panel-link" target="_blank" class="btn btn-sm btn-outline" style="text-decoration:none; display:none; align-items:center;">⚙️ 푸시 관리자</a>
-        <button type="button" id="btn-login-modal" class="btn btn-sm btn-secondary">로그인 / 가입</button>
-        <button type="button" id="btn-logout" class="btn btn-sm btn-outline" style="display:none;">로그아웃</button>
-      </div>
-    </div>
-    <div id="cloud-schedules-bar" style="display:none; margin-top:10px;">
-      <div class="cloud-bar-row">
-        <select id="cloud-schedule-select" class="form-control">
-          <option value="">-- 내 클라우드 시간표 불러오기 --</option>
-        </select>
-        <button type="button" id="btn-delete-cloud-schedule" class="btn btn-sm btn-danger" style="display:none;">선택 시간표 삭제</button>
-      </div>
-    </div>
-  </header>
-
-  <div class="card viewer-card">
-    <div class="header-row">
-      <input type="text" id="schedule-title" class="title-input" value="나의 일주일 시간표 (9시 ~ 21시)" placeholder="시간표 제목을 입력하세요" />
-    </div>
-
-    <div class="svg-wrapper">
-      <svg id="schedule-svg" viewBox="0 0 600 600" role="img" aria-label="원형 일주일 시간표"></svg>
-    </div>
-
-    <div id="detail-card" class="detail-card" style="display:none;">
-      <span id="detail-text">활동 정보</span>
-      <div class="detail-actions">
-        <button type="button" class="btn btn-sm btn-secondary" id="detail-edit-btn">수정</button>
-        <button type="button" class="btn btn-danger btn-sm" id="detail-delete-btn">삭제</button>
-      </div>
-    </div>
-
-    <div class="action-bar">
-      <button type="button" id="btn-render" class="btn btn-primary">🎨 다시 그리기</button>
-      <button type="button" id="btn-load-sample" class="btn btn-secondary">📋 원본 예시 불러오기</button>
-      <button type="button" id="btn-download-png" class="btn btn-outline">💾 이미지 저장(PNG)</button>
-      <button type="button" id="btn-share" class="btn btn-secondary">🔗 공유 링크 생성</button>
-      <button type="button" id="btn-cloud-save" class="btn btn-success" style="display:none;">☁️ 클라우드 저장</button>
-      <button type="button" id="btn-clear-schedule" class="btn btn-outline-danger">🗑️ 시간표 비우기</button>
+<!-- 1. Google Workspace Style Top Header -->
+<header class="g-header">
+  <div class="g-header-left">
+    <button type="button" class="g-hamburger" id="btn-toggle-sidebar" aria-label="메뉴 토글">☰</button>
+    <div class="g-app-title">
+      <span style="font-size: 1.3rem;">🗓️</span>
+      <span>원형 시간표 관리 허브 <span style="font-size:0.85rem; opacity:0.85; font-weight:400;">(Schedule Hub)</span></span>
     </div>
   </div>
+  
+  <div class="g-header-right">
+    <span class="g-version">Version 2.4.0</span>
+    <button type="button" id="btn-open-push-modal" class="btn btn-sm btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.4);">🔔 푸시 알림</button>
+    <a href="/server-admin" id="btn-admin-panel-link" target="_blank" class="btn btn-sm btn-outline" style="text-decoration:none; display:none; color:#fff; border-color:rgba(255,255,255,0.4);">⚙️ 관리자</a>
+    <button type="button" id="btn-login-modal" class="btn btn-sm btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.4);">로그인</button>
+    <button type="button" id="btn-logout" class="btn btn-sm btn-outline" style="display:none; color:#fff; border-color:rgba(255,255,255,0.4);">로그아웃</button>
+    <div class="g-avatar" id="user-avatar" title="게스트 모드">G</div>
+  </div>
+</header>
 
-  <div class="card">
-    <h3 class="section-title" id="form-heading">➕ 활동 등록하기</h3>
-    <form id="add-form">
-      <div class="form-grid">
-        <div class="form-group full">
-          <label for="input-title">활동명</label>
-          <input type="text" id="input-title" placeholder="예: 학교수업, 영어학원, 수영, 피아노, 한글" required autocomplete="off" />
+<!-- 2. Main Layout (Sidebar + Content) -->
+<div class="g-layout">
+  <!-- Sidebar Navigation -->
+  <aside class="g-sidebar" id="g-sidebar">
+    <div class="g-sidebar-section-title">Navigation</div>
+    <button type="button" class="g-sidebar-item active" id="nav-dashboard">
+      <span>📊</span>
+      <span>시간표 보관함 (Bridges)</span>
+    </button>
+    <button type="button" class="g-sidebar-item" id="nav-editor">
+      <span>🎨</span>
+      <span>원형 시간표 편집기</span>
+    </button>
+    <button type="button" class="g-sidebar-item" id="nav-push">
+      <span>🔔</span>
+      <span>푸시 알림 설정</span>
+    </button>
+
+    <div class="g-sidebar-divider"></div>
+    <div class="g-sidebar-section-title">Quick Actions</div>
+    <button type="button" class="g-sidebar-item" id="btn-sidebar-new">
+      <span>➕</span>
+      <span>새 시간표 생성</span>
+    </button>
+    <button type="button" class="g-sidebar-item" id="btn-sidebar-sample">
+      <span>📋</span>
+      <span>샘플 시간표 불러오기</span>
+    </button>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="g-main">
+    
+    <!-- ==========================================
+     * VIEW 1: Dashboard (Card Grid View)
+     * ========================================== -->
+    <section id="view-dashboard">
+      <!-- Top Action Banner -->
+      <div class="g-action-banner">
+        <div class="g-action-left">
+          <button type="button" class="btn-new-fab" id="btn-fab-new-schedule">
+            <span class="plus-icon">➕</span>
+            <span>New</span>
+          </button>
+          
+          <div class="g-breadcrumb">
+            <span class="g-breadcrumb-sub">내 시간표 보관함</span>
+            <span style="color:var(--g-text-muted);">&gt;</span>
+            <strong id="breadcrumb-current-section">등록된 시간표 목록 (Bridges)</strong>
+          </div>
         </div>
 
-        <div class="form-group full">
-          <label>시작 시각 ~ 종료 시각 (9시 ~ 21시)</label>
-          <div class="time-dropdown-row">
-            <div class="time-select-group">
-              <span class="time-label-prefix">시작</span>
-              <select id="select-start" class="form-control time-select" aria-label="시작 시각" required></select>
+        <div class="g-action-right">
+          <div class="g-pill-counter" id="stat-pill-actions">Actions: 0</div>
+          <div class="g-pill-counter dark" id="stat-pill-count">시간표: 1/1</div>
+        </div>
+      </div>
+
+      <!-- Filter Bar -->
+      <div class="g-filter-bar" id="filter-bar">
+        <button type="button" class="g-filter-chip active" data-filter="all">전체 (All)</button>
+        <button type="button" class="g-filter-chip" data-filter="name">이름순 (Name)</button>
+        <button type="button" class="g-filter-chip" data-filter="items">활동 많은 순 (Items)</button>
+        <button type="button" class="g-filter-chip" data-filter="recent">최근 수정순 (Started)</button>
+        <button type="button" class="g-filter-chip" data-filter="weekly">주간 시간표 (Weekly)</button>
+        <button type="button" class="g-filter-chip" data-filter="daily">일일 시간표 (Daily)</button>
+      </div>
+
+      <!-- Schedule Cards 2-Column Grid -->
+      <div class="g-card-grid" id="schedule-card-grid">
+        <!-- Dynamically rendered by app.js -->
+      </div>
+    </section>
+
+    <!-- ==========================================
+     * VIEW 2: Circular SVG Editor View
+     * ========================================== -->
+    <section id="view-editor" style="display: none;">
+      <div class="editor-container">
+        
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <button type="button" id="btn-back-to-dashboard" class="btn btn-sm btn-outline">
+            &larr; 시간표 보관함 목록으로 돌아가기
+          </button>
+          <span id="user-display" style="font-size:0.85rem; font-weight:600; color:var(--g-text-muted);">
+            게스트 모드 (로컬 저장 중)
+          </span>
+        </div>
+
+        <div class="card viewer-card">
+          <div class="header-row">
+            <input type="text" id="schedule-title" class="title-input" value="나의 일주일 시간표 (9시 ~ 21시)" placeholder="시간표 제목을 입력하세요" />
+          </div>
+
+          <div class="svg-wrapper">
+            <svg id="schedule-svg" viewBox="0 0 600 600" role="img" aria-label="원형 일주일 시간표"></svg>
+          </div>
+
+          <div id="detail-card" class="detail-card" style="display:none;">
+            <span id="detail-text">활동 정보</span>
+            <div class="detail-actions">
+              <button type="button" class="btn btn-sm btn-secondary" id="detail-edit-btn">수정</button>
+              <button type="button" class="btn btn-danger btn-sm" id="detail-delete-btn">삭제</button>
             </div>
-            <span class="time-separator">~</span>
-            <div class="time-select-group">
-              <span class="time-label-prefix">종료</span>
-              <select id="select-end" class="form-control time-select" aria-label="종료 시각" required></select>
+          </div>
+
+          <div class="action-bar">
+            <button type="button" id="btn-render" class="btn btn-primary">🎨 다시 그리기</button>
+            <button type="button" id="btn-load-sample" class="btn btn-secondary">📋 샘플 불러오기</button>
+            <button type="button" id="btn-download-png" class="btn btn-outline">💾 이미지 저장(PNG)</button>
+            <button type="button" id="btn-share" class="btn btn-secondary">🔗 공유 링크 생성</button>
+            <button type="button" id="btn-cloud-save" class="btn btn-success" style="display:none;">☁️ 클라우드 저장</button>
+            <button type="button" id="btn-clear-schedule" class="btn btn-outline-danger">🗑️ 시간표 비우기</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="section-title" id="form-heading">➕ 활동 등록하기</h3>
+          <form id="add-form">
+            <div class="form-grid">
+              <div class="form-group full">
+                <label for="input-title">활동명</label>
+                <input type="text" id="input-title" placeholder="예: 학교수업, 영어학원, 수영, 피아노, 한글" required autocomplete="off" />
+              </div>
+
+              <div class="form-group full">
+                <label>시작 시각 ~ 종료 시각 (9시 ~ 21시)</label>
+                <div class="time-dropdown-row">
+                  <div class="time-select-group">
+                    <span class="time-label-prefix">시작</span>
+                    <select id="select-start" class="form-control time-select" aria-label="시작 시각" required></select>
+                  </div>
+                  <span class="time-separator">~</span>
+                  <div class="time-select-group">
+                    <span class="time-label-prefix">종료</span>
+                    <select id="select-end" class="form-control time-select" aria-label="종료 시각" required></select>
+                  </div>
+                  <span id="time-duration" class="time-duration-badge">1시간 30분</span>
+                </div>
+              </div>
+
+              <div class="form-group full">
+                <label>요일 (안쪽 월요일 ~ 바깥쪽 일요일, 여러 날 가능)</label>
+                <div class="day-chips" id="input-days" role="group" aria-label="요일 선택">
+                  <button type="button" class="day-chip active" data-day="0">월</button>
+                  <button type="button" class="day-chip" data-day="1">화</button>
+                  <button type="button" class="day-chip" data-day="2">수</button>
+                  <button type="button" class="day-chip" data-day="3">목</button>
+                  <button type="button" class="day-chip" data-day="4">금</button>
+                  <button type="button" class="day-chip" data-day="5">토</button>
+                  <button type="button" class="day-chip" data-day="6">일</button>
+                </div>
+                <p class="hint">연속된 요일은 원본처럼 하나의 두꺼운 띠로 그려집니다. 예: 월~금 학교수업</p>
+              </div>
+
+              <div class="form-group full">
+                <label for="input-color">대표 색상</label>
+                <div class="color-picker-row">
+                  <input type="color" id="input-color" value="#FF6B6B" />
+                  <span id="color-hex">#FF6B6B</span>
+                  <div class="swatches" id="color-swatches"></div>
+                </div>
+              </div>
             </div>
-            <span id="time-duration" class="time-duration-badge">1시간 30분</span>
-          </div>
+
+            <div class="btn-row">
+              <button type="submit" id="btn-submit-activity" class="btn btn-primary">➕ 시간표에 등록</button>
+              <button type="button" id="btn-cancel-edit" class="btn btn-outline" style="display:none;">취소</button>
+            </div>
+          </form>
         </div>
 
-        <div class="form-group full">
-          <label>요일 (안쪽 월요일 ~ 바깥쪽 일요일, 여러 날 가능)</label>
-          <div class="day-chips" id="input-days" role="group" aria-label="요일 선택">
-            <button type="button" class="day-chip active" data-day="0">월</button>
-            <button type="button" class="day-chip" data-day="1">화</button>
-            <button type="button" class="day-chip" data-day="2">수</button>
-            <button type="button" class="day-chip" data-day="3">목</button>
-            <button type="button" class="day-chip" data-day="4">금</button>
-            <button type="button" class="day-chip" data-day="5">토</button>
-            <button type="button" class="day-chip" data-day="6">일</button>
+        <div class="card collapsible-card" id="activity-list-card">
+          <div class="list-header clickable-header" id="activity-list-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="schedule-list-ui">
+            <span class="list-title">📋 등록된 활동 목록 (<span id="count-badge">0</span>개)</span>
+            <span class="toggle-badge" id="activity-list-icon">▼ 펼치기</span>
           </div>
-          <p class="hint">연속된 요일은 원본처럼 하나의 두꺼운 띠로 그려집니다. 예: 월~금 학교수업</p>
-        </div>
-
-        <div class="form-group full">
-          <label for="input-color">대표 색상</label>
-          <div class="color-picker-row">
-            <input type="color" id="input-color" value="#FF6B6B" />
-            <span id="color-hex">#FF6B6B</span>
-            <div class="swatches" id="color-swatches"></div>
-          </div>
+          <ul id="schedule-list-ui" class="schedule-list" style="display: none;"></ul>
         </div>
       </div>
+    </section>
 
-      <div class="btn-row">
-        <button type="submit" id="btn-submit-activity" class="btn btn-primary">➕ 시간표에 등록</button>
-        <button type="button" id="btn-cancel-edit" class="btn btn-outline" style="display:none;">취소</button>
-      </div>
-    </form>
-  </div>
-
-  <div class="card collapsible-card" id="activity-list-card">
-    <div class="list-header clickable-header" id="activity-list-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="schedule-list-ui">
-      <span class="list-title">📋 등록된 활동 목록 (<span id="count-badge">0</span>개)</span>
-      <span class="toggle-badge" id="activity-list-icon">▼ 펼치기</span>
-    </div>
-    <ul id="schedule-list-ui" class="schedule-list" style="display: none;"></ul>
-  </div>
+  </main>
 </div>
 
+<!-- ==========================================
+ * Modals
+ * ========================================== -->
+
+<!-- 1. Auth Modal -->
 <div id="auth-modal" class="modal-overlay" style="display:none;">
   <div class="modal-card">
     <h3>로그인 / 회원가입</h3>
@@ -144,35 +241,42 @@
   </div>
 </div>
 
+<!-- 2. Share Modal -->
 <div id="share-modal" class="modal-overlay" style="display:none;">
   <div class="modal-card">
-    <h3>시간표 공유 링크</h3>
-    <p class="modal-sub">아래 링크를 복사하여 시간표를 공유할 수 있습니다.</p>
-    <input type="text" id="share-url-input" class="form-control" readonly style="margin:12px 0;" />
-    <div class="btn-row">
-      <button type="button" id="btn-copy-url" class="btn btn-primary">링크 복사</button>
-      <button type="button" id="btn-close-share" class="btn btn-secondary">닫기</button>
+    <h3>🔗 시간표 공유 링크 생성 완료</h3>
+    <p class="modal-sub">아래 링크를 복사하여 친구나 가족에게 시간표를 공유하세요.</p>
+    <div class="form-group full" style="margin-top:12px;">
+      <input type="text" id="share-url-input" readonly />
+    </div>
+    <div class="btn-row" style="margin-top:16px;">
+      <button type="button" id="btn-copy-url" class="btn btn-primary">링크 복사하기</button>
+      <button type="button" id="btn-close-share" class="btn btn-outline">닫기</button>
     </div>
   </div>
 </div>
 
+<!-- 3. Pushwing Notification Modal -->
 <div id="push-modal" class="modal-overlay" style="display:none;">
-  <div class="modal-card" style="max-width: 440px;">
-    <h3>🔔 일정 푸시 알림 (Web Push)</h3>
-    <p class="modal-sub">브라우저나 기기가 닫혀 있어도 일정 알림을 받을 수 있습니다.</p>
-    
-    <div class="push-status-card" style="background:#f8f9fa; border:1px solid #dee2e6; border-radius:8px; padding:12px; margin:12px 0; font-size:0.85rem;">
-      <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+  <div class="modal-card" style="max-width: 480px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <h3 style="margin:0;">🔔 Pushwing 웹 푸시 알림</h3>
+      <span class="badge" style="background:#e8f0fe; color:var(--g-blue); font-size:0.75rem; padding:3px 8px; border-radius:12px;">Web Push</span>
+    </div>
+    <p class="modal-sub">등록된 시간표 시작 시간에 맞춰 푸시 알림을 실시간으로 수신합니다.</p>
+
+    <div style="margin-top:14px; padding:12px; background:#f8fafd; border-radius:8px; border:1px solid var(--g-border); font-size:0.85rem; display:flex; flex-direction:column; gap:6px;">
+      <div style="display:flex; justify-content:space-between;">
         <span>브라우저 지원:</span>
-        <strong id="push-stat-support">확인 중...</strong>
+        <strong id="push-stat-supported">확인 중...</strong>
       </div>
-      <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+      <div style="display:flex; justify-content:space-between;">
         <span>알림 권한:</span>
         <strong id="push-stat-permission">확인 중...</strong>
       </div>
       <div style="display:flex; justify-content:space-between;">
         <span>구독 상태:</span>
-        <strong id="push-stat-subscribed" style="color:var(--primary);">확인 중...</strong>
+        <strong id="push-stat-subscribed" style="color:var(--g-blue);">확인 중...</strong>
       </div>
     </div>
 
