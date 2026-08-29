@@ -529,11 +529,14 @@ window.toggleCardDropdown = function(event, id) {
   if (!isAlreadyOpen) {
     dropdown.style.display = "flex";
     activeOpenDropdownId = id;
+    const card = dropdown.closest(".g-schedule-card-clean");
+    if (card) card.classList.add("menu-open");
   }
 };
 
 function closeAllDropdowns() {
   document.querySelectorAll(".card-dropdown-menu").forEach(el => el.style.display = "none");
+  document.querySelectorAll(".g-schedule-card-clean").forEach(el => el.classList.remove("menu-open"));
   activeOpenDropdownId = null;
 }
 
