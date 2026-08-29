@@ -12,6 +12,7 @@ async function sendNotificationToSubscriptions(subscriptions, payload) {
   let successCount = 0;
   let failCount = 0;
   let prunedCount = 0;
+  let lastError = null;
 
   const payloadString = JSON.stringify({
     title: payload.title || 'Pushwing Notification',
@@ -37,19 +38,20 @@ async function sendNotificationToSubscriptions(subscriptions, payload) {
     } catch (err) {
       failCount++;
       const statusCode = err.statusCode || err.status;
+      lastError = `HTTP ${statusCode}: ${err.body || err.message}`;
       // 404 Not Found or 410 Gone indicates subscription has expired or unsubscribed
       if (statusCode === 404 || statusCode === 410) {
         console.log(`[PushService] Pruning expired subscription (HTTP ${statusCode}): ${sub.endpoint}`);
         await db.deleteSubscriptionByEndpoint(sub.endpoint);
         prunedCount++;
       } else {
-        console.error(`[PushService] Failed to send push to ${sub.endpoint}:`, err.message);
+        console.error(`[PushService] Failed to send push to ${sub.endpoint} (HTTP ${statusCode}):`, err.body || err.message);
       }
     }
   });
 
   await Promise.all(sendPromises);
-  return { successCount, failCount, prunedCount };
+  return { successCount, failCount, prunedCount, lastError };
 }
 
 module.exports = {

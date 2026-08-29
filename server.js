@@ -314,7 +314,8 @@ app.post('/api/v1/push', async (req, res) => {
       deliveredCount: result.successCount,
       failCount: result.failCount,
       prunedCount: result.prunedCount,
-      totalTargeted: subscriptions.length
+      totalTargeted: subscriptions.length,
+      lastError: result.lastError || null
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

@@ -74,14 +74,20 @@
       const publicKey = await this.getVapidPublicKey();
       const convertedVapidKey = urlBase64ToUint8Array(publicKey);
 
-      let subscription = await reg.pushManager.getSubscription();
-
-      if (!subscription) {
-        subscription = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: convertedVapidKey
-        });
+      // Always clear stale or key-mismatched subscription to guarantee fresh VAPID sync
+      let existingSub = await reg.pushManager.getSubscription();
+      if (existingSub) {
+        try {
+          await existingSub.unsubscribe();
+        } catch (e) {
+          console.warn('[PushwingClient] Unsubscribe stale before resubscribe:', e);
+        }
       }
+
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: convertedVapidKey
+      });
 
       // Save subscription on Pushwing server
       const response = await fetch(`${this.serverUrl}/api/v1/subscribe`, {
