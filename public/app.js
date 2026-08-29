@@ -419,9 +419,16 @@ function renderDashboard() {
     privateFilterChip.style.display = currentUser ? "inline-block" : "none";
   }
 
-  let filtered = [...allSchedules];
+  let baseSchedules = [...allSchedules];
 
-  if (currentFilter === "private") {
+  // If Guest mode (not logged in), strictly exclude any private schedules!
+  if (!currentUser) {
+    baseSchedules = baseSchedules.filter(s => s.is_public === true || !s.user_id);
+  }
+
+  let filtered = [...baseSchedules];
+
+  if (currentFilter === "private" && currentUser) {
     filtered = filtered.filter(s => s.user_id && !s.is_public);
   } else if (currentFilter === "public") {
     filtered = filtered.filter(s => s.is_public || !s.user_id);
@@ -443,8 +450,8 @@ function renderDashboard() {
 
   const statPillCount = $("stat-pill-count");
   if (statPillCount) {
-    statPillCount.textContent = `시간표: ${filtered.length}/${allSchedules.length}`;
-    statPillCount.title = `전체 ${allSchedules.length}개 중 ${filtered.length}개 표시 중`;
+    statPillCount.textContent = `시간표: ${filtered.length}/${baseSchedules.length}`;
+    statPillCount.title = `전체 ${baseSchedules.length}개 중 ${filtered.length}개 표시 중`;
   }
 
   if (filtered.length === 0) {
@@ -1465,6 +1472,18 @@ async function handleAuthChange(user) {
     }
     const adminBtn = $("btn-admin-panel-link");
     if (adminBtn) adminBtn.style.display = "none";
+
+    // Purge private schedules from local memory on logout
+    allSchedules = allSchedules.filter(s => s.is_public === true || !s.user_id);
+    saveHubSchedules();
+
+    // Reset filter from "private" to "all" on logout
+    if (currentFilter === "private") {
+      currentFilter = "all";
+      document.querySelectorAll(".g-filter-chip").forEach(c => {
+        c.classList.toggle("active", c.dataset.filter === "all");
+      });
+    }
   }
 
   await loadSchedulesFromSupabase();
