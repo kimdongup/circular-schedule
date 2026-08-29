@@ -14,5 +14,9 @@
     "nanoid": "^3.3.7",
     "sqlite3": "^5.1.7",
     "web-push": "^3.6.7"
+  },
+  "overrides": {
+    "tar": "^7.4.3",
+    "@tootallnate/once": "^2.0.1"
   }
 }
