@@ -148,6 +148,26 @@ app.get('/api/v1/admin/stats', requireAdminAuth, async (req, res) => {
   }
 });
 
+// 2-1. DB 연결 진단 API (관리자 전용)
+app.get('/api/v1/admin/db-health', requireAdminAuth, async (req, res) => {
+  try {
+    const stats = await db.getStats();
+    const apps = await db.listApps();
+    res.json({
+      success: true,
+      status: 'healthy',
+      dbType: stats.dbType,
+      dbConnected: stats.dbConnected,
+      isSupabaseReady: stats.isSupabaseReady,
+      tableStatus: stats.tableStatus,
+      totalApps: apps.length,
+      supabaseUrl: stats.dbUrl || null
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 3. 앱(테넌트) 목록 조회
 app.get('/api/v1/apps', async (req, res) => {
   try {

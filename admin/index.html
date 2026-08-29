@@ -91,7 +91,11 @@
   <!-- Admin Dashboard Container (Shown only to verified Admins) -->
   <div id="admin-dashboard" style="display: none;">
     <!-- Server System Stats -->
-    <div class="stats-grid">
+    <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+      <div class="stat-card">
+        <div class="label">🔌 DB 연결 상태</div>
+        <div id="stat-db-type" class="val" style="font-size: 1.05rem; color: var(--primary);">연결 확인 중...</div>
+      </div>
       <div class="stat-card">
         <div class="label">등록된 App Key (테넌트)</div>
         <div id="stat-apps" class="val">0</div>
@@ -106,7 +110,7 @@
       </div>
       <div class="stat-card">
         <div class="label">서버 Uptime 및 VAPID</div>
-        <div id="stat-uptime" class="val" style="font-size: 1.1rem; color: var(--text);">가동 중</div>
+        <div id="stat-uptime" class="val" style="font-size: 1.05rem; color: var(--text);">가동 중</div>
       </div>
     </div>
 

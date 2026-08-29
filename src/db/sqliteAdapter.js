@@ -171,7 +171,11 @@ class SqliteAdapter {
 
   getStats() {
     return new Promise((resolve, reject) => {
-      const stats = {};
+      const stats = {
+        dbType: 'Local SQLite (pushwing.db)',
+        dbConnected: true,
+        isSupabaseReady: false
+      };
       this.db.get('SELECT COUNT(*) as count FROM apps', [], (err, row) => {
         if (err) return reject(err);
         stats.totalApps = row ? row.count : 0;

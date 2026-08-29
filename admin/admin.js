@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const statSubs = document.getElementById('stat-subs');
   const statSent = document.getElementById('stat-sent');
   const statUptime = document.getElementById('stat-uptime');
+  const statDbType = document.getElementById('stat-db-type');
 
   const adminAppName = document.getElementById('admin-app-name');
   const adminAppKey = document.getElementById('admin-app-key');
@@ -181,6 +182,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         statSent.textContent = data.stats.totalSent || 0;
         const uptimeMin = Math.floor((data.stats.uptimeSeconds || 0) / 60);
         statUptime.textContent = `${uptimeMin}분 가동 중`;
+
+        if (statDbType) {
+          if (data.stats.isSupabaseReady) {
+            statDbType.innerHTML = '<span style="color:var(--success);">🟢 Supabase DB</span>';
+          } else if (data.stats.dbType && data.stats.dbType.includes('Supabase')) {
+            statDbType.innerHTML = '<span style="color:var(--warning);" title="Supabase 테이블 생성 대기 중 (SQLite 폴백 가동)">🟡 Supabase (폴백)</span>';
+          } else {
+            statDbType.innerHTML = '<span style="color:var(--primary);">📁 SQLite DB</span>';
+          }
+        }
       }
     } catch (err) {
       console.error('Error fetching stats:', err);

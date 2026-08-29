@@ -259,27 +259,55 @@ class SupabaseAdapter {
   }
 
   async getStats() {
+    let totalApps = 0;
+    let totalSubscriptions = 0;
+    let totalLogs = 0;
+    let totalSent = 0;
+    let isSupabaseReady = false;
+    let tableStatus = { apps: false, subscriptions: false, push_logs: false, user_roles: false };
+
     try {
-      const [appsRes, subsRes, logsRes] = await Promise.all([
+      const [appsRes, subsRes, logsRes, rolesRes] = await Promise.all([
         this.client.from('apps').select('*', { count: 'exact', head: true }),
         this.client.from('subscriptions').select('*', { count: 'exact', head: true }),
-        this.client.from('push_logs').select('success_count')
+        this.client.from('push_logs').select('success_count'),
+        this.client.from('user_roles').select('*', { count: 'exact', head: true })
       ]);
 
-      if (appsRes.error && isTableMissing(appsRes.error)) {
-        return this.fallbackSqlite.getStats();
+      tableStatus.apps = !appsRes.error;
+      tableStatus.subscriptions = !subsRes.error;
+      tableStatus.push_logs = !logsRes.error;
+      tableStatus.user_roles = !rolesRes.error;
+
+      if (!appsRes.error) {
+        isSupabaseReady = true;
+        totalApps = appsRes.count || 0;
+        totalSubscriptions = subsRes.count || 0;
+        const logs = logsRes.data || [];
+        totalLogs = logs.length;
+        totalSent = logs.reduce((sum, row) => sum + (row.success_count || 0), 0);
       }
+    } catch (err) {}
 
-      const totalApps = appsRes.count || 0;
-      const totalSubscriptions = subsRes.count || 0;
-      const logs = logsRes.data || [];
-      const totalLogs = logs.length;
-      const totalSent = logs.reduce((sum, row) => sum + (row.success_count || 0), 0);
-
-      return { totalApps, totalSubscriptions, totalLogs, totalSent };
-    } catch (err) {
-      return this.fallbackSqlite.getStats();
+    if (!isSupabaseReady) {
+      const sqliteStats = await this.fallbackSqlite.getStats();
+      totalApps = sqliteStats.totalApps;
+      totalSubscriptions = sqliteStats.totalSubscriptions;
+      totalLogs = sqliteStats.totalLogs;
+      totalSent = sqliteStats.totalSent;
     }
+
+    return {
+      totalApps,
+      totalSubscriptions,
+      totalLogs,
+      totalSent,
+      dbType: isSupabaseReady ? 'Supabase PostgreSQL' : 'Supabase (SQLite Fallback)',
+      dbConnected: true,
+      isSupabaseReady,
+      tableStatus,
+      dbUrl: this.supabaseUrl
+    };
   }
 
   async createPushLog({ app_key, title, body, url, success_count, fail_count }) {
