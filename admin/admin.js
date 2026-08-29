@@ -481,6 +481,39 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // 12. Database Synchronization Trigger
+  const btnTriggerSync = document.getElementById('btn-trigger-sync');
+  const syncStatusText = document.getElementById('sync-status-text');
+
+  if (btnTriggerSync) {
+    btnTriggerSync.addEventListener('click', async () => {
+      btnTriggerSync.disabled = true;
+      btnTriggerSync.textContent = '🔄 동기화 진행 중...';
+
+      try {
+        const res = await fetchWithAuth('/api/v1/admin/sync', { method: 'POST' });
+        const data = await res.json();
+        if (data.success && data.syncResult) {
+          const r = data.syncResult;
+          const timeStr = new Date(r.timestamp).toLocaleTimeString();
+          if (syncStatusText) {
+            syncStatusText.innerHTML = `✅ <strong>${timeStr}</strong> 동기화 완료 (앱: ${r.syncedApps}개, 구독: ${r.syncedSubscriptions}개, 롤: ${r.syncedRoles}개)`;
+            syncStatusText.style.color = 'var(--success)';
+          }
+          alert(`🎉 Supabase ↔ SQLite DB 동기화 완료!\n\n동기화된 App Key: ${r.syncedApps}개\n동기화된 구독: ${r.syncedSubscriptions}개\n동기화된 관리자 롤: ${r.syncedRoles}개\n소요시간: ${r.durationMs}ms`);
+          await loadAllDashboardData();
+        } else {
+          alert('동기화 실패: ' + (data.error || '알 수 없는 오류'));
+        }
+      } catch (err) {
+        alert('동기화 통신 오류: ' + err.message);
+      } finally {
+        btnTriggerSync.disabled = false;
+        btnTriggerSync.textContent = '⚡ 지금 즉시 DB 동기화 실행';
+      }
+    });
+  }
+
   // Start initialization
   await initAuth();
 });

@@ -114,6 +114,17 @@
       </div>
     </div>
 
+    <!-- DB Sync Control Bar -->
+    <div class="card" style="margin-bottom: 18px; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; background: #0f172a;">
+      <div>
+        <strong style="color: #60a5fa; font-size: 0.95rem;">🔄 Supabase ↔ SQLite 데이터베이스 동기화</strong>
+        <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 10px;" id="sync-status-text">매일 자동 동기화 활성 중 (24시간 주기)</span>
+      </div>
+      <button type="button" id="btn-trigger-sync" class="btn btn-outline btn-sm" style="border-color: var(--primary); color: #93c5fd;">
+        ⚡ 지금 즉시 DB 동기화 실행
+      </button>
+    </div>
+
     <div class="grid-2">
       <!-- App Key Management Card -->
       <div class="card">

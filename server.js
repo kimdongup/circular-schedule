@@ -7,6 +7,7 @@ require('dotenv').config();
 const db = require('./src/db');
 const vapid = require('./src/vapid');
 const { sendNotificationToSubscriptions } = require('./src/pushService');
+const syncService = require('./src/db/syncService');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -163,6 +164,16 @@ app.get('/api/v1/admin/db-health', requireAdminAuth, async (req, res) => {
       totalApps: apps.length,
       supabaseUrl: stats.dbUrl || null
     });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 2-2. SQLite ↔ Supabase 동기화 트리거 API (관리자 전용)
+app.post('/api/v1/admin/sync', requireAdminAuth, async (req, res) => {
+  try {
+    const syncResult = await syncService.syncAll();
+    res.json({ success: true, syncResult });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -414,4 +425,6 @@ app.listen(PORT, HOST, () => {
   console.log(`📱 Pushwing PWA Client: http://${HOST}:${PORT}/client/index.html`);
   console.log(`🔑 VAPID Public Key: ${vapid.publicKey}`);
   console.log('====================================================');
+  // Start daily database synchronization (every 24 hours)
+  syncService.startScheduledSync(24 * 60 * 60 * 1000);
 });

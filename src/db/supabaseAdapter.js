@@ -92,11 +92,14 @@ class SupabaseAdapter {
     try {
       const { data, error } = await this.client
         .from('apps')
-        .insert({
-          app_key: appKey,
-          app_name: appName,
-          secret_key: secretKey
-        })
+        .upsert(
+          {
+            app_key: appKey,
+            app_name: appName,
+            secret_key: secretKey
+          },
+          { onConflict: 'app_key' }
+        )
         .select()
         .single();
 
