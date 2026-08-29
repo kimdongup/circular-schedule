@@ -1006,27 +1006,50 @@ function setupEvents() {
 
   // Auth Modals
   $("btn-login-modal").addEventListener("click", () => {
-    if (!supabase) return alert("Supabase 연결이 설정되지 않았습니다.");
     $("auth-modal").style.display = "flex";
   });
+
+  const userAvatar = $("user-avatar");
+  if (userAvatar) {
+    userAvatar.addEventListener("click", () => {
+      if (currentUser) {
+        if (confirm(`'${currentUser.email}' 계정에서 로그아웃하시겠습니까?`)) {
+          if (supabase) supabase.auth.signOut();
+        }
+      } else {
+        $("auth-modal").style.display = "flex";
+      }
+    });
+  }
 
   $("btn-close-auth").addEventListener("click", () => {
     $("auth-modal").style.display = "none";
   });
 
   $("btn-do-login").addEventListener("click", async () => {
-    if (!supabase) return;
-    const email = $("auth-email").value;
-    const password = $("auth-password").value;
+    if (!supabase) await initSupabase();
+    if (!supabase) return alert("Supabase 클라우드 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+
+    const email = $("auth-email").value.trim();
+    const password = $("auth-password").value.trim();
+    if (!email || !password) return alert("이메일과 비밀번호를 모두 입력해 주세요.");
+
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) alert("로그인 실패: " + error.message);
-    else $("auth-modal").style.display = "none";
+    else {
+      $("auth-modal").style.display = "none";
+      showTopHeaderNotification(`🎉 '${email}' 계정으로 로그인되었습니다.`);
+    }
   });
 
   $("btn-do-signup").addEventListener("click", async () => {
-    if (!supabase) return;
-    const email = $("auth-email").value;
-    const password = $("auth-password").value;
+    if (!supabase) await initSupabase();
+    if (!supabase) return alert("Supabase 클라우드 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+
+    const email = $("auth-email").value.trim();
+    const password = $("auth-password").value.trim();
+    if (!email || !password) return alert("이메일과 비밀번호를 모두 입력해 주세요.");
+
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) alert("가입 실패: " + error.message);
     else alert("가입 완료! 자동 로그인되었습니다.");
@@ -1187,7 +1210,11 @@ async function initSupabase() {
   try {
     const configRes = await fetch("/api/config");
     const { supabaseUrl, supabaseAnonKey } = await configRes.json();
-    if (supabaseUrl && supabaseAnonKey && window.supabase) {
+    if (supabaseUrl && supabaseAnonKey) {
+      if (!window.supabase) {
+        const mod = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+        window.supabase = mod;
+      }
       supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
       const { data: { session } } = await supabase.auth.getSession();
       if (session) handleAuthChange(session.user);
@@ -1195,7 +1222,9 @@ async function initSupabase() {
         handleAuthChange(session ? session.user : null);
       });
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn("[App] initSupabase notice:", e.message);
+  }
 }
 
 async function handleAuthChange(user) {
