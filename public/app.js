@@ -33,12 +33,14 @@ const SAMPLE_ITEMS = [
   sample("한글", 16.33, 17.33, [2], "#FF922B")
 ];
 
-// Initial preset schedules
+// Initial preset schedules (Public by default)
 const DEFAULT_PRESET_SCHEDULES = [
   {
     id: "preset-1",
     title: "김연진의 하루 시간표",
     items: SAMPLE_ITEMS,
+    is_public: true,
+    user_id: null,
     updatedAt: new Date(Date.now() - 3600000).toISOString()
   },
   {
@@ -51,6 +53,8 @@ const DEFAULT_PRESET_SCHEDULES = [
       sample("수영교실", 16, 17.5, [1, 3], "#339AF0"),
       sample("자유독서", 18, 19.5, [0, 1, 2, 3, 4], "#B197FC")
     ],
+    is_public: true,
+    user_id: null,
     updatedAt: new Date(Date.now() - 7200000).toISOString()
   },
   {
@@ -62,6 +66,8 @@ const DEFAULT_PRESET_SCHEDULES = [
       sample("미술창작", 17, 18.5, [2, 4], "#00008B"),
       sample("스트레칭", 20, 21, [0, 1, 2, 3, 4, 5, 6], "#F06595")
     ],
+    is_public: true,
+    user_id: null,
     updatedAt: new Date(Date.now() - 86400000).toISOString()
   },
   {
@@ -72,6 +78,8 @@ const DEFAULT_PRESET_SCHEDULES = [
       sample("코딩프로젝트", 19, 20.5, [0, 1, 2, 3], "#339AF0"),
       sample("주말러닝", 9, 11, [5, 6], "#51CF66")
     ],
+    is_public: true,
+    user_id: null,
     updatedAt: new Date(Date.now() - 172800000).toISOString()
   }
 ];
@@ -262,7 +270,7 @@ function normalizeItem(item, idx) {
 }
 
 // ==========================================
-// Multi-Schedule Hub Data Model
+// Multi-Schedule Hub Data Model & Storage
 // ==========================================
 function loadHubSchedules() {
   try {
@@ -338,6 +346,64 @@ function createMiniSvgThumbnail(sItems) {
   `;
 }
 
+// Load Schedules from Supabase with RLS Isolation
+async function loadSchedulesFromSupabase() {
+  if (!supabase) return;
+  try {
+    const { data, error } = await supabase
+      .from("schedules")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (data && !error && data.length > 0) {
+      const remoteMap = new Map();
+      data.forEach(row => {
+        remoteMap.set(row.id, {
+          id: row.id,
+          title: row.title,
+          items: Array.isArray(row.items) ? row.items : [],
+          is_public: row.is_public !== undefined ? row.is_public : true,
+          user_id: row.user_id || null,
+          updatedAt: row.updated_at || row.created_at || new Date().toISOString()
+        });
+      });
+
+      // Retain presets
+      allSchedules.forEach(local => {
+        if (!remoteMap.has(local.id)) {
+          remoteMap.set(local.id, local);
+        }
+      });
+
+      allSchedules = Array.from(remoteMap.values());
+      saveHubSchedules();
+      renderDashboard();
+    }
+  } catch (e) {
+    console.warn("[App] loadSchedulesFromSupabase error:", e.message);
+  }
+}
+
+// Save or Upsert Schedule to Supabase
+async function saveScheduleToSupabase(schedule) {
+  if (!supabase) return;
+  try {
+    const isPublic = schedule.is_public !== undefined ? schedule.is_public : (currentUser ? false : true);
+    const userId = currentUser ? currentUser.id : null;
+
+    await supabase.from("schedules").upsert({
+      id: schedule.id,
+      user_id: userId,
+      title: schedule.title,
+      items: schedule.items,
+      is_public: isPublic,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "id" });
+  } catch (e) {
+    console.warn("[App] saveScheduleToSupabase error:", e.message);
+  }
+}
+
 // ==========================================
 // Dashboard View & Clean Card Renderer
 // ==========================================
@@ -347,15 +413,19 @@ function renderDashboard() {
 
   grid.innerHTML = "";
 
-  const totalSchedules = allSchedules.length;
-  const statPillCount = $("stat-pill-count");
-  if (statPillCount) {
-    statPillCount.textContent = `시간표: ${totalSchedules}/${totalSchedules}`;
+  // Show/Hide private filter chip depending on login state
+  const privateFilterChip = $("chip-filter-private");
+  if (privateFilterChip) {
+    privateFilterChip.style.display = currentUser ? "inline-block" : "none";
   }
 
   let filtered = [...allSchedules];
 
-  if (currentFilter === "name") {
+  if (currentFilter === "private") {
+    filtered = filtered.filter(s => s.user_id && !s.is_public);
+  } else if (currentFilter === "public") {
+    filtered = filtered.filter(s => s.is_public || !s.user_id);
+  } else if (currentFilter === "name") {
     filtered.sort((a, b) => a.title.localeCompare(b.title));
   } else if (currentFilter === "items") {
     filtered.sort((a, b) => (b.items || []).length - (a.items || []).length);
@@ -363,11 +433,21 @@ function renderDashboard() {
     filtered.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
   }
 
+  const statPillCount = $("stat-pill-count");
+  if (statPillCount) {
+    statPillCount.textContent = `시간표: ${filtered.length}/${allSchedules.length}`;
+  }
+
   filtered.forEach(schedule => {
     const stats = calculateScheduleStats(schedule);
     const card = document.createElement("div");
     card.className = "g-schedule-card-clean";
     card.dataset.id = schedule.id;
+
+    const isPrivate = schedule.user_id && !schedule.is_public;
+    const visibilityBadge = isPrivate
+      ? `<span style="background:#f3e8ff; color:#7e22ce; font-size:0.72rem; font-weight:700; padding:2px 8px; border-radius:10px; border:1px solid #e9d5ff;">🔒 나만 보기 (Private)</span>`
+      : `<span style="background:#ecfdf5; color:#047857; font-size:0.72rem; font-weight:700; padding:2px 8px; border-radius:10px; border:1px solid #a7f3d0;">🌐 공개 (Public)</span>`;
 
     const dateStr = schedule.updatedAt ? new Date(schedule.updatedAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '방금 전';
 
@@ -377,11 +457,15 @@ function renderDashboard() {
         ${createMiniSvgThumbnail(schedule.items)}
       </div>
 
-      <!-- 2. Card Details (Title & Items) -->
+      <!-- 2. Card Details (Title, Visibility & Items) -->
       <div class="card-details-wrapper" onclick="openScheduleEditor('${schedule.id}')">
-        <div class="card-clean-title" title="${escapeHtml(schedule.title)}">
-          ${escapeHtml(schedule.title)}
+        <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
+          <div class="card-clean-title" title="${escapeHtml(schedule.title)}">
+            ${escapeHtml(schedule.title)}
+          </div>
+          ${visibilityBadge}
         </div>
+
         <div class="card-clean-items">
           <span>📋</span>
           <span>활동 <strong>${stats.itemCount}개</strong> 등록됨</span>
@@ -462,12 +546,19 @@ window.duplicateSchedule = function(id) {
   const schedule = getScheduleById(id);
   if (!schedule) return;
 
-  const newSchedule = JSON.parse(JSON.stringify(schedule));
-  newSchedule.id = "sched-" + Date.now();
-  newSchedule.title = schedule.title + " (사본)";
-  newSchedule.updatedAt = new Date().toISOString();
+  const isPrivate = currentUser ? false : true;
+  const newSchedule = {
+    ...JSON.parse(JSON.stringify(schedule)),
+    id: "sched-" + Date.now(),
+    title: schedule.title + " (사본)",
+    user_id: currentUser ? currentUser.id : null,
+    is_public: currentUser ? false : true,
+    updatedAt: new Date().toISOString()
+  };
+
   allSchedules.unshift(newSchedule);
   saveHubSchedules();
+  saveScheduleToSupabase(newSchedule);
   renderDashboard();
   showTopHeaderNotification(`📋 '${newSchedule.title}' 시간표가 복제되었습니다.`);
 };
@@ -482,6 +573,11 @@ window.deleteSchedule = function(id) {
 
   allSchedules = allSchedules.filter(s => s.id !== id);
   saveHubSchedules();
+
+  if (supabase) {
+    supabase.from("schedules").delete().eq("id", id).then(() => {});
+  }
+
   renderDashboard();
   showTopHeaderNotification(`🗑️ '${schedule.title}' 시간표가 삭제되었습니다.`);
 };
@@ -496,6 +592,7 @@ window.renameSchedule = function(id) {
     schedule.title = newTitle.trim();
     schedule.updatedAt = new Date().toISOString();
     saveHubSchedules();
+    saveScheduleToSupabase(schedule);
     renderDashboard();
     showTopHeaderNotification(`✏️ 시간표 제목이 '${schedule.title}'(으)로 변경되었습니다.`);
   }
@@ -504,17 +601,22 @@ window.renameSchedule = function(id) {
 function createNewSchedule() {
   const newId = "sched-" + Date.now();
   const newTitle = "새 시간표 " + (allSchedules.length + 1);
+  const isPrivate = Boolean(currentUser);
+
   const newSchedule = {
     id: newId,
     title: newTitle,
     items: [],
+    is_public: !isPrivate,
+    user_id: currentUser ? currentUser.id : null,
     updatedAt: new Date().toISOString()
   };
 
   allSchedules.unshift(newSchedule);
   saveHubSchedules();
+  saveScheduleToSupabase(newSchedule);
   openScheduleEditor(newId);
-  showTopHeaderNotification(`➕ '${newTitle}' 생성이 완료되었습니다.`);
+  showTopHeaderNotification(`➕ '${newTitle}' (${isPrivate ? '비공개' : '공개'}) 생성이 완료되었습니다.`);
 }
 
 // Navigation View Switchers
@@ -539,7 +641,12 @@ function syncCurrentScheduleToHub() {
     current.title = $("schedule-title").value || "나의 일주일 시간표";
     current.items = items;
     current.updatedAt = new Date().toISOString();
+    if (currentUser) {
+      current.user_id = currentUser.id;
+      current.is_public = false;
+    }
     saveHubSchedules();
+    saveScheduleToSupabase(current);
   }
 }
 
@@ -860,7 +967,7 @@ function setupEvents() {
     showTopHeaderNotification("📋 원본 샘플 시간표가 로드되었습니다.");
   });
 
-  // Filter chips (All, Name, Items, Recent)
+  // Filter chips (All, Private, Public, Name, Items, Recent)
   const filterChips = document.querySelectorAll(".g-filter-chip");
   filterChips.forEach(chip => {
     chip.addEventListener("click", () => {
@@ -969,10 +1076,7 @@ function setupEvents() {
 
   // Share
   $("btn-share").addEventListener("click", async () => {
-    if (!supabase) {
-      alert("Supabase 클라우드가 연결되어 있지 않습니다.");
-      return;
-    }
+    if (!supabase) return alert("Supabase 클라우드가 연결되어 있지 않습니다.");
     const res = await fetch("/api/generate-id");
     const { id } = await res.json();
     const title = $("schedule-title").value;
@@ -1039,6 +1143,7 @@ function setupEvents() {
     else {
       $("auth-modal").style.display = "none";
       showTopHeaderNotification(`🎉 '${email}' 계정으로 로그인되었습니다.`);
+      await loadSchedulesFromSupabase();
     }
   });
 
@@ -1236,7 +1341,7 @@ async function handleAuthChange(user) {
   const avatar = $("user-avatar");
 
   if (user) {
-    if (userDisplay) userDisplay.textContent = `${user.email} (클라우드 동기화)`;
+    if (userDisplay) userDisplay.textContent = `${user.email} (로그인 완료)`;
     if (loginBtn) loginBtn.style.display = "none";
     if (logoutBtn) logoutBtn.style.display = "inline-block";
     if (cloudSaveBtn) cloudSaveBtn.style.display = "inline-block";
@@ -1246,7 +1351,7 @@ async function handleAuthChange(user) {
     }
     await checkAdminRole(user.id, user.email);
   } else {
-    if (userDisplay) userDisplay.textContent = "게스트 모드 (로컬 저장 중)";
+    if (userDisplay) userDisplay.textContent = "게스트 모드 (공개 저장)";
     if (loginBtn) loginBtn.style.display = "inline-block";
     if (logoutBtn) logoutBtn.style.display = "none";
     if (cloudSaveBtn) cloudSaveBtn.style.display = "none";
@@ -1257,6 +1362,9 @@ async function handleAuthChange(user) {
     const adminBtn = $("btn-admin-panel-link");
     if (adminBtn) adminBtn.style.display = "none";
   }
+
+  await loadSchedulesFromSupabase();
+  renderDashboard();
 }
 
 async function checkAdminRole(userId, email) {

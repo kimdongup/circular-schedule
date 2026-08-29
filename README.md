@@ -66,6 +66,7 @@
 | 날짜 (Date) | 작업 주제 (Topic) | 구현 계획서 (Plan) | 작업 완료 보고서 (Walkthrough) |
 |:---|:---|:---:|:---:|
 | **2026-08-28** | Google Workspace Migrate 스타일 카드 대시보드 UI/UX 전면 개편 | [📄 계획서 보기](docs/plans/2026-08-28_google_workspace_dashboard_plan.md) | [📝 보고서 보기](docs/walkthroughs/2026-08-28_google_workspace_dashboard_walkthrough.md) |
+| **2026-08-28** | 게스트 모드 공개 시간표 및 로그인 회원 전용 비공개 시간표 분리 저장 | [📄 계획서 보기](docs/plans/2026-08-28_guest_public_user_private_schedule_plan.md) | [📝 보고서 보기](docs/walkthroughs/2026-08-28_guest_public_user_private_schedule_walkthrough.md) |
 
 ---
 

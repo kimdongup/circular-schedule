@@ -24,13 +24,13 @@ create policy "Anyone can insert schedules"
 on public.schedules for insert 
 with check (true);
 
-create policy "Users can update own schedules" 
+create policy "Users can update schedules" 
 on public.schedules for update 
-using (auth.uid() = user_id);
+using (auth.uid() = user_id or user_id is null);
 
-create policy "Users can delete own schedules" 
+create policy "Users can delete schedules" 
 on public.schedules for delete 
-using (auth.uid() = user_id);
+using (auth.uid() = user_id or user_id is null);
 
 
 -- 2. 관리자 롤 (user_roles) 테이블

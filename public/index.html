@@ -95,9 +95,11 @@
         </div>
       </div>
 
-      <!-- Filter Bar (Cleaned: All, Name, Items, Recent) -->
+      <!-- Filter Bar (All, Private, Public, Name, Items, Recent) -->
       <div class="g-filter-bar" id="filter-bar">
         <button type="button" class="g-filter-chip active" data-filter="all">전체 (All)</button>
+        <button type="button" class="g-filter-chip" data-filter="private" id="chip-filter-private" style="display:none;">🔒 내 비공개 시간표 (Private)</button>
+        <button type="button" class="g-filter-chip" data-filter="public">🌐 공개 시간표 (Public)</button>
         <button type="button" class="g-filter-chip" data-filter="name">이름순 (Name)</button>
         <button type="button" class="g-filter-chip" data-filter="items">활동 많은 순 (Items)</button>
         <button type="button" class="g-filter-chip" data-filter="recent">최근 수정순 (Started)</button>
