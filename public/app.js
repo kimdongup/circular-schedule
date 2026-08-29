@@ -1077,21 +1077,78 @@ function setupEvents() {
 
   $("schedule-title").addEventListener("input", saveLocal);
 
-  // Share
-  $("btn-share").addEventListener("click", async () => {
-    if (!supabase) return alert("Supabase 클라우드가 연결되어 있지 않습니다.");
-    const res = await fetch("/api/generate-id");
-    const { id } = await res.json();
-    const title = $("schedule-title").value;
-    const { error } = await supabase.from("schedules").insert({
-      id,
-      user_id: currentUser ? currentUser.id : null,
-      title,
-      items,
-      is_public: true
+  // PNG Download
+  function downloadSvgAsPng() {
+    const svgEl = $("schedule-svg");
+    if (!svgEl) return;
+    const title = $("schedule-title").value || "circular-schedule";
+    const svgData = new XMLSerializer().serializeToString(svgEl);
+    const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+    const URL = window.URL || window.webkitURL || window;
+    const blobURL = URL.createObjectURL(svgBlob);
+    
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1200;
+      canvas.height = 1200;
+      const context = canvas.getContext("2d");
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      
+      const png = canvas.toDataURL("image/png");
+      const downloadLink = document.createElement("a");
+      downloadLink.download = `${title.replace(/\s+/g, "_")}.png`;
+      downloadLink.href = png;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      URL.revokeObjectURL(blobURL);
+      showTopHeaderNotification(`💾 '${title}.png' 이미지가 저장되었습니다.`);
+    };
+    image.src = blobURL;
+  }
+
+  const btnDownloadPng = $("btn-download-png");
+  if (btnDownloadPng) {
+    btnDownloadPng.addEventListener("click", downloadSvgAsPng);
+  }
+
+  // Cloud Save for logged-in users
+  const btnCloudSave = $("btn-cloud-save");
+  if (btnCloudSave) {
+    btnCloudSave.addEventListener("click", async () => {
+      syncCurrentScheduleToHub();
+      showTopHeaderNotification("☁️ 클라우드 저장이 완료되었습니다.");
     });
-    if (error) return alert("공유 링크 생성 실패: " + error.message);
-    $("share-url-input").value = `${window.location.origin}/s/${id}`;
+  }
+
+  // Share (Works for both Guest and Logged-in users)
+  $("btn-share").addEventListener("click", async () => {
+    let shareId = "share-" + Date.now();
+    try {
+      const res = await fetch("/api/generate-id");
+      const data = await res.json();
+      if (data && data.id) shareId = data.id;
+    } catch (e) {}
+
+    const title = $("schedule-title").value || "나의 일주일 시간표";
+    
+    if (supabase) {
+      try {
+        await supabase.from("schedules").upsert({
+          id: shareId,
+          user_id: currentUser ? currentUser.id : null,
+          title,
+          items,
+          is_public: true,
+          updated_at: new Date().toISOString()
+        });
+      } catch (e) {}
+    }
+
+    $("share-url-input").value = `${window.location.origin}/s/${shareId}`;
     $("share-modal").style.display = "flex";
   });
 
@@ -1100,7 +1157,7 @@ function setupEvents() {
     input.select();
     try {
       await navigator.clipboard.writeText(input.value);
-      alert("공유 링크가 복사되었습니다!");
+      alert("공유 링크가 클립보드에 복사되었습니다!");
     } catch (e) {
       document.execCommand("copy");
       alert("공유 링크가 복사되었습니다!");
@@ -1111,9 +1168,13 @@ function setupEvents() {
     $("share-modal").style.display = "none";
   });
 
-  // Auth Modals
+  // Auth Modals (Prominently functional for Guest and Member)
   $("btn-login-modal").addEventListener("click", () => {
     $("auth-modal").style.display = "flex";
+    setTimeout(() => {
+      const emailInput = $("auth-email");
+      if (emailInput) emailInput.focus();
+    }, 100);
   });
 
   const userAvatar = $("user-avatar");
