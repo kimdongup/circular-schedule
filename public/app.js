@@ -906,6 +906,10 @@ function setupEvents() {
   // ==========================================
   $("btn-open-push-modal").addEventListener("click", async () => {
     $("push-modal").style.display = "flex";
+    const pushUserId = $("push-user-id");
+    if (pushUserId && currentUser && currentUser.email) {
+      pushUserId.value = currentUser.email;
+    }
     await loadAvailableApps();
     await updatePushStatusUI();
   });
