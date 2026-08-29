@@ -191,6 +191,7 @@
     <div class="btn-row" style="margin-top:16px; flex-direction:column; gap:8px;">
       <button type="button" id="btn-toggle-push-sub" class="btn btn-primary" style="width:100%;">🔔 웹 푸시 알림 받기 (구독)</button>
       <button type="button" id="btn-send-test-push" class="btn btn-success" style="width:100%;">🚀 나에게 테스트 푸시 보내기</button>
+      <button type="button" id="btn-test-local-notify" class="btn btn-sm btn-outline" style="width:100%;">🧪 맥(Mac) 화면 알림 팝업 즉시 테스트</button>
     </div>
 
     <div style="margin-top:14px; padding-top:12px; border-top:1px solid #e9ecef; display:flex; justify-content:flex-end; align-items:center;">
@@ -198,6 +199,9 @@
     </div>
   </div>
 </div>
+
+<!-- Floating In-App Toast Notification -->
+<div id="push-toast-container" style="position:fixed; top:20px; right:20px; z-index:99999; display:flex; flex-direction:column; gap:10px; pointer-events:none;"></div>
 
 <script src="/pushwing-client.js"></script>
 <script src="/app.js" defer></script>

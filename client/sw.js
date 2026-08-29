@@ -19,15 +19,17 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+const DEFAULT_ICON = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%233b82f6'/><text x='50' y='65' font-size='45' text-anchor='middle' fill='white'>⏰</text></svg>";
+
 // 1. Push Event Listener (Background Notification Arrival)
 self.addEventListener('push', (event) => {
   console.log('[Pushwing SW] Push event received.');
 
   let data = {
-    title: 'Pushwing Notification',
-    body: 'New update received.',
-    icon: '/client/icon-192.png',
-    badge: '/client/icon-192.png',
+    title: '⏰ Pushwing 알림',
+    body: '새로운 웹 푸시가 도착했습니다.',
+    icon: DEFAULT_ICON,
+    badge: DEFAULT_ICON,
     url: '/client/index.html'
   };
 
@@ -36,9 +38,9 @@ self.addEventListener('push', (event) => {
       const payload = event.data.json();
       data.title = payload.title || data.title;
       data.body = payload.body || data.body;
-      data.icon = payload.icon || data.icon;
-      data.badge = payload.badge || data.badge;
-      data.url = payload.url || data.url;
+      data.icon = payload.icon || DEFAULT_ICON;
+      data.badge = payload.badge || DEFAULT_ICON;
+      data.url = payload.url || '/client/index.html';
       data.extraData = payload.extraData || {};
     } catch (e) {
       data.body = event.data.text();
@@ -50,6 +52,9 @@ self.addEventListener('push', (event) => {
     icon: data.icon,
     badge: data.badge,
     vibrate: [200, 100, 200],
+    requireInteraction: true,
+    tag: 'pushwing-alert-' + Date.now(),
+    renotify: true,
     data: {
       url: data.url,
       extraData: data.extraData
@@ -60,9 +65,20 @@ self.addEventListener('push', (event) => {
     ]
   };
 
-  event.waitUntil(
-    self.registration.showNotification(data.title, notificationOptions)
-  );
+  const showPromise = self.registration.showNotification(data.title, notificationOptions);
+
+  const broadcastPromise = self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+    clients.forEach((client) => {
+      client.postMessage({
+        type: 'PUSH_NOTIFICATION_RECEIVED',
+        title: data.title,
+        body: data.body,
+        url: data.url
+      });
+    });
+  });
+
+  event.waitUntil(Promise.all([showPromise, broadcastPromise]));
 });
 
 // 2. Notification Click Listener

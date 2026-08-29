@@ -985,7 +985,7 @@ function setupEvents() {
       const data = await res.json();
       if (data.success) {
         if (data.deliveredCount > 0) {
-          alert(`✅ 테스트 푸시가 성공적으로 전송되었습니다! (수신 기기: ${data.deliveredCount}대)`);
+          alert(`✅ [서버 전송 성공] 총 ${data.deliveredCount}대의 기기로 푸시가 성공적으로 전송되었습니다!\n\n💡 만약 화면 배너가 바로 뜨지 않는다면:\n1. 맥 화면 우측 상단 '제어 센터'에서 [집중 모드(방해 금지)]가 켜져 있는지 확인해 주세요.\n2. 맥 [시스템 설정 -> 알림 -> Chrome]에서 알림이 켜져 있는지 확인해 주세요.\n3. 맥 우측 상단 시계/날짜를 클릭하여 [알림 센터]를 확인해 보세요!`);
         } else {
           alert(`[${selectedKey}] 키로 구독 중인 기기를 찾을 수 없습니다. 먼저 [🔔 웹 푸시 알림 받기]를 완료해 주세요.`);
         }
@@ -997,6 +997,61 @@ function setupEvents() {
     } finally {
       btn.disabled = false;
       btn.textContent = "🚀 나에게 테스트 푸시 보내기";
+    }
+  });
+
+  const btnTestLocal = $("btn-test-local-notify");
+  if (btnTestLocal) {
+    btnTestLocal.addEventListener("click", async () => {
+      if (typeof Notification === "undefined") {
+        alert("이 브라우저는 알림 기능을 지원하지 않습니다.");
+        return;
+      }
+      let perm = Notification.permission;
+      if (perm !== "granted") {
+        perm = await Notification.requestPermission();
+      }
+      if (perm === "granted") {
+        try {
+          new Notification("⏰ [로컬 팝업 테스트] 정상 작동 중!", {
+            body: "이 팝업이 화면에 보이면 맥(Mac) OS와 브라우저 알림이 100% 정상 작동하는 상태입니다.",
+            requireInteraction: true
+          });
+          showInAppToast("⏰ [로컬 팝업 테스트] 알림 실행 완료!", "맥 화면 우측 상단 배너를 확인해 보세요.");
+        } catch (e) {
+          alert("로컬 알림 생성 실패: " + e.message);
+        }
+      } else {
+        alert("알림 권한이 거부되어 있습니다. 브라우저 주소창 좌측 자물쇠(설정) 아이콘을 눌러 '알림: 허용'으로 변경해 주세요.");
+      }
+    });
+  }
+}
+
+function showInAppToast(title, body) {
+  const container = $("push-toast-container");
+  if (!container) return;
+
+  const toast = document.createElement("div");
+  toast.style.cssText = "background:#1e293b; color:#fff; border:1px solid #3b82f6; border-radius:10px; padding:14px 18px; box-shadow:0 10px 25px rgba(0,0,0,0.4); font-size:0.9rem; max-width:350px; pointer-events:auto;";
+  toast.innerHTML = `
+    <div style="font-weight:bold; color:#60a5fa; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
+      <span>🔔 ${title}</span>
+      <button style="background:none; border:none; color:#94a3b8; font-size:1rem; cursor:pointer; padding:0 4px;" onclick="this.parentElement.parentElement.remove()">✕</button>
+    </div>
+    <div style="color:#e2e8f0; font-size:0.85rem;">${body}</div>
+  `;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    if (toast.parentElement) toast.remove();
+  }, 9000);
+}
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data && event.data.type === "PUSH_NOTIFICATION_RECEIVED") {
+      showInAppToast(event.data.title || "새 푸시 알림", event.data.body || "");
     }
   });
 }
