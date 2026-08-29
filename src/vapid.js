@@ -5,6 +5,9 @@ require('dotenv').config();
 
 const vapidKeysPath = path.join(__dirname, '../data/vapid_keys.json');
 
+const DEFAULT_PUBLIC_KEY = 'BOdvdN24aV4d7J8gXkZ-ZdlEa89ns5ZL5XfM1C1eDKJw0sfqAfQzruBoL7vwfNJK81fBUwqNr49H97vyLmE3-rE';
+const DEFAULT_PRIVATE_KEY = 'Aq6yCMI1BVJuU_p4N0hyz2Y3xm9CojY2rgNcH5TxeGU';
+
 function initVapidKeys() {
   let publicKey = process.env.VAPID_PUBLIC_KEY;
   let privateKey = process.env.VAPID_PRIVATE_KEY;
@@ -24,18 +27,17 @@ function initVapidKeys() {
   }
 
   if (!publicKey || !privateKey) {
-    console.log('[VAPID] No VAPID keys found. Generating new key pair...');
-    const vapidKeys = webpush.generateVAPIDKeys();
-    publicKey = vapidKeys.publicKey;
-    privateKey = vapidKeys.privateKey;
+    publicKey = DEFAULT_PUBLIC_KEY;
+    privateKey = DEFAULT_PRIVATE_KEY;
 
     const dataDir = path.dirname(vapidKeysPath);
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
     }
 
-    fs.writeFileSync(vapidKeysPath, JSON.stringify({ publicKey, privateKey }, null, 2));
-    console.log('[VAPID] Generated and saved new VAPID keys to data/vapid_keys.json');
+    try {
+      fs.writeFileSync(vapidKeysPath, JSON.stringify({ publicKey, privateKey }, null, 2));
+    } catch (e) {}
   }
 
   webpush.setVapidDetails(subject, publicKey, privateKey);
