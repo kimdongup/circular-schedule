@@ -734,12 +734,26 @@ input:focus, select:focus { border-color: var(--g-blue); }
 
 /* Modals */
 .modal-overlay {
-  position: fixed; inset: 0; background: rgba(32,33,36,0.6);
-  display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 16px;
+  position: fixed;
+  inset: 0;
+  background: rgba(32,33,36,0.65);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 99999 !important;
+  padding: 16px;
+  backdrop-filter: blur(2px);
 }
 .modal-card {
-  background: #fff; border-radius: var(--g-card-radius); padding: 24px;
-  width: 100%; max-width: 440px; box-shadow: var(--g-shadow);
+  background: #fff;
+  border-radius: var(--g-card-radius);
+  padding: 24px;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+  position: relative;
+  z-index: 100000 !important;
+  animation: fadeInDown 0.2s ease;
 }
 .modal-sub { font-size: 0.85rem; color: var(--g-text-muted); margin-top: 4px; }
 

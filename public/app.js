@@ -1189,33 +1189,38 @@ function setupEvents() {
     $("share-modal").style.display = "none";
   });
 
-  // Auth Modals (Prominently functional for Guest and Member)
-  $("btn-login-modal").addEventListener("click", () => {
-    $("auth-modal").style.display = "flex";
-    setTimeout(() => {
-      const emailInput = $("auth-email");
-      if (emailInput) emailInput.focus();
-    }, 100);
-  });
+  // Auth Modals (Global & Event Attached)
+  window.openAuthModal = function() {
+    const modal = $("auth-modal");
+    if (modal) {
+      modal.style.display = "flex";
+      setTimeout(() => {
+        const emailInput = $("auth-email");
+        if (emailInput) emailInput.focus();
+      }, 100);
+    }
+  };
 
-  const userAvatar = $("user-avatar");
-  if (userAvatar) {
-    userAvatar.addEventListener("click", () => {
-      if (currentUser) {
-        if (confirm(`'${currentUser.email}' 계정에서 로그아웃하시겠습니까?`)) {
-          if (supabase) supabase.auth.signOut();
-        }
-      } else {
-        $("auth-modal").style.display = "flex";
+  window.closeAuthModal = function() {
+    const modal = $("auth-modal");
+    if (modal) modal.style.display = "none";
+  };
+
+  window.handleAvatarClick = function() {
+    if (currentUser) {
+      if (confirm(`'${currentUser.email}' 계정에서 로그아웃하시겠습니까?`)) {
+        if (supabase) supabase.auth.signOut();
       }
-    });
-  }
+    } else {
+      window.openAuthModal();
+    }
+  };
 
-  $("btn-close-auth").addEventListener("click", () => {
-    $("auth-modal").style.display = "none";
-  });
+  window.doLogout = async function() {
+    if (supabase) await supabase.auth.signOut();
+  };
 
-  $("btn-do-login").addEventListener("click", async () => {
+  window.doLogin = async function() {
     if (!supabase) await initSupabase();
     if (!supabase) return alert("Supabase 클라우드 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.");
 
@@ -1226,13 +1231,13 @@ function setupEvents() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) alert("로그인 실패: " + error.message);
     else {
-      $("auth-modal").style.display = "none";
+      window.closeAuthModal();
       showTopHeaderNotification(`🎉 '${email}' 계정으로 로그인되었습니다.`);
       await loadSchedulesFromSupabase();
     }
-  });
+  };
 
-  $("btn-do-signup").addEventListener("click", async () => {
+  window.doSignup = async function() {
     if (!supabase) await initSupabase();
     if (!supabase) return alert("Supabase 클라우드 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.");
 
@@ -1243,11 +1248,22 @@ function setupEvents() {
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) alert("가입 실패: " + error.message);
     else alert("가입 완료! 자동 로그인되었습니다.");
-  });
+  };
 
-  $("btn-logout").addEventListener("click", async () => {
-    if (supabase) await supabase.auth.signOut();
-  });
+  const btnLoginModal = $("btn-login-modal");
+  if (btnLoginModal) btnLoginModal.addEventListener("click", window.openAuthModal);
+
+  const btnCloseAuth = $("btn-close-auth");
+  if (btnCloseAuth) btnCloseAuth.addEventListener("click", window.closeAuthModal);
+
+  const btnDoLogin = $("btn-do-login");
+  if (btnDoLogin) btnDoLogin.addEventListener("click", window.doLogin);
+
+  const btnDoSignup = $("btn-do-signup");
+  if (btnDoSignup) btnDoSignup.addEventListener("click", window.doSignup);
+
+  const btnLogout = $("btn-logout");
+  if (btnLogout) btnLogout.addEventListener("click", window.doLogout);
 
   // Push Modal Events
   $("btn-close-push-modal").addEventListener("click", () => {
