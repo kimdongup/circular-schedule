@@ -433,9 +433,30 @@ function renderDashboard() {
     filtered.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
   }
 
+  const totalActions = filtered.reduce((sum, s) => sum + (s.items || []).length, 0);
+  
+  const statPillActions = $("stat-pill-actions");
+  if (statPillActions) {
+    statPillActions.textContent = `Actions: ${totalActions}`;
+    statPillActions.title = `현재 목록에 등록된 총 활동(Action) 개수: ${totalActions}개`;
+  }
+
   const statPillCount = $("stat-pill-count");
   if (statPillCount) {
     statPillCount.textContent = `시간표: ${filtered.length}/${allSchedules.length}`;
+    statPillCount.title = `전체 ${allSchedules.length}개 중 ${filtered.length}개 표시 중`;
+  }
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 48px 20px; background: #fff; border: 1px dashed var(--g-border); border-radius: var(--g-card-radius); color: var(--g-text-muted);">
+        <div style="font-size: 2rem; margin-bottom: 8px;">🗓️</div>
+        <div style="font-size: 1rem; font-weight: 600; color: var(--g-text); margin-bottom: 4px;">표시할 시간표가 없습니다.</div>
+        <div style="font-size: 0.85rem; margin-bottom: 16px;">상단의 <strong>[+ New]</strong> 버튼을 눌러 새 시간표를 만들어보세요!</div>
+        <button type="button" class="btn btn-sm btn-primary" onclick="createNewSchedule()">➕ 새 시간표 생성</button>
+      </div>
+    `;
+    return;
   }
 
   filtered.forEach(schedule => {
