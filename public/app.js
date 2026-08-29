@@ -675,28 +675,31 @@ function syncCurrentScheduleToHub() {
 }
 
 // ==========================================
-// Top Blue Header Push Notification Banner
+// Floating Notification Window Card Popup
 // ==========================================
 let headerPushTimeout = null;
-function showTopHeaderNotification(message) {
-  const banner = $("header-push-banner");
-  const text = $("header-push-text");
-  if (!banner || !text) return;
+function showTopHeaderNotification(titleMessage, bodyText = "") {
+  const windowCard = $("floating-push-window");
+  const titleEl = $("header-push-title");
+  const textEl = $("header-push-text");
+  if (!windowCard) return;
 
-  text.textContent = message;
-  banner.style.display = "flex";
+  if (titleEl) titleEl.textContent = titleMessage;
+  if (textEl) textEl.textContent = bodyText || "원형 시간표 실시간 알림 시스템";
+
+  windowCard.style.display = "flex";
 
   if (headerPushTimeout) clearTimeout(headerPushTimeout);
   headerPushTimeout = setTimeout(() => {
-    banner.style.display = "none";
+    windowCard.style.display = "none";
   }, 8000);
 }
 
 const btnCloseHeaderPush = $("btn-close-header-push");
 if (btnCloseHeaderPush) {
   btnCloseHeaderPush.addEventListener("click", () => {
-    const banner = $("header-push-banner");
-    if (banner) banner.style.display = "none";
+    const windowCard = $("floating-push-window");
+    if (windowCard) windowCard.style.display = "none";
   });
 }
 
