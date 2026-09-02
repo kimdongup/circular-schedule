@@ -792,6 +792,32 @@ input:focus, select:focus { border-color: var(--g-blue); }
 .btn-outline-danger { background: transparent; border: 1px solid #f28b82; color: var(--g-danger); }
 .btn-outline-danger:hover { background: #fce8e6; }
 
+/* 편집기 작업 버튼은 기능별 글자색을 유지하되 배경은 모두 투명하게 통일합니다. */
+.action-bar .btn,
+.action-bar .btn:hover {
+  background: transparent;
+}
+.action-bar .btn-primary {
+  border: 1px solid var(--g-blue);
+  color: var(--g-blue);
+}
+.action-bar .btn-secondary,
+.action-bar .btn-outline {
+  border: 1px solid var(--g-border);
+  color: var(--g-text);
+}
+.action-bar .btn-success {
+  border: 1px solid var(--g-success);
+  color: var(--g-success);
+}
+.action-bar .btn-outline-danger {
+  border: 1px solid #f28b82;
+  color: var(--g-danger);
+}
+.action-bar .btn:hover {
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
 /* Activity List */
 .list-header { display: flex; justify-content: space-between; align-items: center; font-weight: 700; }
 .clickable-header {
