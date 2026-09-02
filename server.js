@@ -267,6 +267,24 @@ app.post('/api/v1/unsubscribe', async (req, res) => {
   }
 });
 
+// 7-1. 브라우저 구독이 서버 DB에도 등록되어 있는지 확인
+app.post('/api/v1/subscription-status', async (req, res) => {
+  try {
+    const { app_key, endpoint } = req.body;
+    if (!app_key || !endpoint) {
+      return res.status(400).json({
+        success: false,
+        error: 'app_key and endpoint are required'
+      });
+    }
+
+    const registered = await db.hasSubscription(app_key, endpoint);
+    res.json({ success: true, registered });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 8. 푸시 알림 발송 (Push Dispatcher)
 app.post('/api/v1/push', requireAdminAuth, async (req, res) => {
   try {

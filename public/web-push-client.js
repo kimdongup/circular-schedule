@@ -28,7 +28,7 @@
   class WebPushClient {
     constructor(options = {}) {
       this.serverUrl = options.serverUrl || global.location.origin;
-      this.appKey = options.appKey || 'demo-app-key-2026';
+      this.appKey = options.appKey || '';
       this.swPath = options.swPath || '/sw.js';
       this.scope = options.scope || '/';
       this.vapidPublicKey = null;
@@ -88,6 +88,7 @@
       const publicKey = await this.getVapidPublicKey();
       const applicationServerKey = urlBase64ToUint8Array(publicKey);
       let subscription = await registration.pushManager.getSubscription();
+      let createdSubscription = false;
 
       if (subscription && !keysMatch(subscription, applicationServerKey)) {
         await subscription.unsubscribe();
@@ -99,6 +100,7 @@
           userVisibleOnly: true,
           applicationServerKey
         });
+        createdSubscription = true;
       }
 
       const response = await fetch(`${this.serverUrl}/api/v1/subscribe`, {
@@ -111,8 +113,11 @@
         })
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.success) {
+        if (createdSubscription) {
+          await subscription.unsubscribe().catch(() => false);
+        }
         throw new Error(result.error || '푸시 구독을 서버에 저장하지 못했습니다.');
       }
 
@@ -153,11 +158,30 @@
       const subscription = registration
         ? await registration.pushManager.getSubscription()
         : null;
+      let serverRegistered = false;
+
+      if (subscription && this.appKey) {
+        try {
+          const response = await fetch(`${this.serverUrl}/api/v1/subscription-status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              app_key: this.appKey,
+              endpoint: subscription.endpoint
+            })
+          });
+          const result = await response.json();
+          serverRegistered = Boolean(response.ok && result.success && result.registered);
+        } catch (_error) {
+          serverRegistered = false;
+        }
+      }
 
       return {
         supported: true,
         permission: Notification.permission,
         subscribed: Boolean(subscription),
+        serverRegistered,
         subscription: subscription ? subscription.toJSON() : null
       };
     }

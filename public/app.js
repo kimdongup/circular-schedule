@@ -983,10 +983,16 @@ function setupEvents() {
   // Navigation Tabs
   $("nav-dashboard").addEventListener("click", showDashboardView);
   $("nav-editor").addEventListener("click", showEditorView);
-  $("nav-push").addEventListener("click", () => {
+  $("nav-push").addEventListener("click", async () => {
     $("push-modal").style.display = "flex";
-    loadAvailableApps();
-    updatePushStatusUI();
+    const subscribeButton = $("btn-toggle-push-sub");
+    const sendButton = $("btn-send-test-push");
+    subscribeButton.disabled = true;
+    sendButton.disabled = true;
+    const appsLoaded = await loadAvailableApps();
+    subscribeButton.disabled = !appsLoaded;
+    sendButton.disabled = !appsLoaded;
+    await updatePushStatusUI();
   });
   $("btn-back-to-dashboard").addEventListener("click", showDashboardView);
 
@@ -1284,8 +1290,7 @@ function setupEvents() {
   let webPushClient = null;
   if (typeof WebPushClient !== "undefined") {
     webPushClient = new WebPushClient({
-      serverUrl: window.location.origin,
-      appKey: "demo-app-key-2026"
+      serverUrl: window.location.origin
     });
     webPushClient.registerServiceWorker().catch((error) => {
       console.info("[Web Push] Service Worker registration skipped:", error.message);
@@ -1295,6 +1300,8 @@ function setupEvents() {
   async function updatePushStatusUI() {
     if (!webPushClient) return;
     try {
+      const selectedApp = $("push-select-app");
+      webPushClient.appKey = selectedApp ? selectedApp.value : '';
       const status = await webPushClient.getSubscriptionStatus();
       const sup = $("push-stat-supported");
       const perm = $("push-stat-permission");
@@ -1303,26 +1310,33 @@ function setupEvents() {
 
       if (sup) sup.textContent = status.supported ? "지원됨 (Yes)" : "미지원 (No)";
       if (perm) perm.textContent = status.permission;
-      if (sub) sub.textContent = status.subscribed ? "구독 중 (Active)" : "미구독 (Inactive)";
-      if (btn) {
-        btn.textContent = status.subscribed ? "🔕 푸시 알림 구독 해제" : "🔔 웹 푸시 알림 받기 (구독)";
-        btn.className = status.subscribed ? "btn btn-outline-danger" : "btn btn-primary";
+      if (sub) {
+        sub.textContent = status.subscribed && status.serverRegistered
+          ? "구독 중 (브라우저 + 서버 등록 완료)"
+          : (status.subscribed ? "서버 재등록 필요" : "미구독 (Inactive)");
       }
-    } catch (e) {}
+      if (btn) {
+        const fullyRegistered = status.subscribed && status.serverRegistered;
+        btn.textContent = fullyRegistered ? "🔕 푸시 알림 구독 해제" : "🔔 웹 푸시 알림 등록/복구";
+        btn.className = fullyRegistered ? "btn btn-outline-danger" : "btn btn-primary";
+      }
+    } catch (error) {
+      console.error('[Web Push] Failed to update subscription status:', error);
+    }
   }
 
   $("btn-toggle-push-sub").addEventListener("click", async () => {
     if (!webPushClient) return alert("Web Push 클라이언트를 로드할 수 없습니다.");
-    const selectedKey = $("push-select-app") ? $("push-select-app").value : "demo-app-key-2026";
-    webPushClient.appKey = selectedKey;
-
-    const status = await webPushClient.getSubscriptionStatus();
+    const selectedKey = $("push-select-app") ? $("push-select-app").value : "";
+    if (!selectedKey) return alert("구독할 앱을 먼저 선택해 주세요.");
     const btn = $("btn-toggle-push-sub");
     btn.disabled = true;
     btn.textContent = "처리 중...";
 
     try {
-      if (status.subscribed) {
+      webPushClient.appKey = selectedKey;
+      const status = await webPushClient.getSubscriptionStatus();
+      if (status.subscribed && status.serverRegistered) {
         await webPushClient.unsubscribe();
         alert("푸시 알림 구독이 해제되었습니다.");
       } else {
@@ -1339,7 +1353,8 @@ function setupEvents() {
   });
 
   $("btn-send-test-push").addEventListener("click", async () => {
-    const selectedKey = $("push-select-app") ? $("push-select-app").value : "demo-app-key-2026";
+    const selectedKey = $("push-select-app") ? $("push-select-app").value : "";
+    if (!selectedKey) return alert("푸시를 보낼 앱을 먼저 선택해 주세요.");
     const userId = $("push-user-id").value.trim();
     const title = $("schedule-title").value || "나의 일주일 시간표";
     const btn = $("btn-send-test-push");
@@ -1400,21 +1415,31 @@ function setupEvents() {
 
 async function loadAvailableApps() {
   const selectApp = $("push-select-app");
-  if (!selectApp) return;
+  if (!selectApp) return false;
 
   try {
     const res = await fetch("/api/v1/apps");
     const data = await res.json();
-    if (data.success && data.apps && data.apps.length > 0) {
-      selectApp.innerHTML = "";
-      data.apps.forEach(app => {
-        const opt = document.createElement("option");
-        opt.value = app.app_key;
-        opt.textContent = `${app.app_name} (${app.app_key})`;
-        selectApp.appendChild(opt);
-      });
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || '앱 목록을 불러오지 못했습니다.');
     }
-  } catch (e) {}
+    if (!data.apps || data.apps.length === 0) {
+      throw new Error('등록된 Web Push 앱이 없습니다. 관리자 화면에서 앱을 먼저 생성해 주세요.');
+    }
+
+    selectApp.innerHTML = "";
+    data.apps.forEach(app => {
+      const opt = document.createElement("option");
+      opt.value = app.app_key;
+      opt.textContent = `${app.app_name} (${app.app_key})`;
+      selectApp.appendChild(opt);
+    });
+    return true;
+  } catch (error) {
+    selectApp.innerHTML = '<option value="" selected disabled>앱 목록을 불러오지 못했습니다.</option>';
+    alert(error.message);
+    return false;
+  }
 }
 
 // Supabase Init

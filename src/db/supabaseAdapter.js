@@ -109,6 +109,18 @@ class SupabaseAdapter {
     return data || [];
   }
 
+  async hasSubscription(appKey, endpoint) {
+    const { data, error } = await this.requireClient()
+      .from('subscriptions')
+      .select('id')
+      .eq('app_key', appKey)
+      .eq('endpoint', endpoint)
+      .maybeSingle();
+
+    this.assertResult(error, 'Check subscription');
+    return Boolean(data);
+  }
+
   async deleteSubscriptionByEndpoint(endpoint) {
     const { data, error } = await this.requireClient()
       .from('subscriptions')
