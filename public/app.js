@@ -94,6 +94,9 @@ let selectedItemId = null;
 let editingId = null;
 let currentFilter = "all";
 let activeOpenDropdownId = null;
+let schedulesSyncPromise = null;
+let schedulesSyncTimer = null;
+let schedulesRealtimeChannel = null;
 
 function sample(title, start, end, days, color) {
   return { id: `sample-${title}-${start}-${days.join("")}`, title, start, end, days, color };
@@ -278,7 +281,7 @@ function loadHubSchedules() {
     const raw = localStorage.getItem(HUB_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         allSchedules = parsed;
         return;
       }
@@ -349,39 +352,84 @@ function createMiniSvgThumbnail(sItems) {
 
 // Load Schedules from Supabase with RLS Isolation
 async function loadSchedulesFromSupabase() {
-  if (!supabase) return;
-  try {
-    const { data, error } = await supabase
-      .from("schedules")
-      .select("*")
-      .order("created_at", { ascending: false });
+  if (!supabase) return false;
+  if (schedulesSyncPromise) return schedulesSyncPromise;
 
-    if (data && !error && data.length > 0) {
-      const remoteMap = new Map();
-      data.forEach(row => {
-        remoteMap.set(row.id, {
-          id: row.id,
-          title: row.title,
-          items: Array.isArray(row.items) ? row.items : [],
-          is_public: row.is_public !== undefined ? row.is_public : true,
-          user_id: row.user_id || null,
-          updatedAt: row.updated_at || row.created_at || new Date().toISOString()
+  schedulesSyncPromise = (async () => {
+    try {
+      const { data, error } = await supabase
+        .from("schedules")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      if (Array.isArray(data)) {
+        const previousScheduleId = currentScheduleId;
+        const editorWasOpen = $("view-editor") && $("view-editor").style.display !== "none";
+        const remoteMap = new Map();
+        data.forEach(row => {
+          remoteMap.set(row.id, {
+            id: row.id,
+            title: row.title,
+            items: Array.isArray(row.items) ? row.items : [],
+            is_public: row.is_public !== undefined ? row.is_public : true,
+            user_id: row.user_id || null,
+            updatedAt: row.updated_at || row.created_at || new Date().toISOString()
+          });
         });
-      });
 
-      // Retain presets
-      allSchedules.forEach(local => {
-        if (!remoteMap.has(local.id)) {
-          remoteMap.set(local.id, local);
+        // 로그인 중에는 Supabase를 기준 데이터로 사용합니다. 브라우저별 localStorage
+        // 항목을 다시 합치면 다른 브라우저에서 삭제한 시간표가 되살아납니다.
+        if (!currentUser) {
+          allSchedules.forEach(local => {
+            if (!remoteMap.has(local.id)) remoteMap.set(local.id, local);
+          });
         }
-      });
 
-      allSchedules = Array.from(remoteMap.values());
-      saveHubSchedules();
-      renderDashboard();
+        allSchedules = Array.from(remoteMap.values());
+        if (previousScheduleId && !remoteMap.has(previousScheduleId)) {
+          currentScheduleId = allSchedules.length > 0 ? allSchedules[0].id : null;
+          if (editorWasOpen) {
+            showDashboardView();
+            showStatusMessage("🔄 다른 브라우저의 삭제 내용을 반영했습니다.");
+          }
+        }
+        saveHubSchedules();
+        renderDashboard();
+      }
+      return true;
+    } catch (e) {
+      console.warn("[App] loadSchedulesFromSupabase error:", e.message);
+      return false;
+    } finally {
+      schedulesSyncPromise = null;
     }
-  } catch (e) {
-    console.warn("[App] loadSchedulesFromSupabase error:", e.message);
+  })();
+
+  return schedulesSyncPromise;
+}
+
+function setupCrossBrowserScheduleSync() {
+  if (!supabase) return;
+
+  if (!schedulesRealtimeChannel) {
+    schedulesRealtimeChannel = supabase
+      .channel("schedule-cross-browser-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "schedules" }, () => {
+        loadSchedulesFromSupabase();
+      })
+      .subscribe();
+  }
+
+  const refreshVisibleSession = () => {
+    if (currentUser && document.visibilityState !== "hidden") loadSchedulesFromSupabase();
+  };
+
+  window.addEventListener("focus", refreshVisibleSession);
+  document.addEventListener("visibilitychange", refreshVisibleSession);
+
+  if (!schedulesSyncTimer) {
+    schedulesSyncTimer = window.setInterval(refreshVisibleSession, 15000);
   }
 }
 
@@ -622,9 +670,6 @@ window.duplicateSchedule = function(id) {
 
 window.deleteSchedule = async function(id) {
   closeAllDropdowns();
-  if (allSchedules.length <= 1) {
-    return alert("최소 1개의 시간표는 유지되어야 합니다.");
-  }
   const schedule = allSchedules.find(s => s.id === id);
   if (!schedule) return;
 
@@ -649,23 +694,38 @@ window.deleteSchedule = async function(id) {
       });
       const result = await response.json().catch(() => ({}));
 
-      // 로컬 기본 예제는 DB 행이 없으므로 관리자에게 로컬 삭제를 허용합니다.
-      const isLocalPreset = id.startsWith("preset-");
-      if (!response.ok && !(response.status === 404 && isLocalPreset)) {
-        throw new Error(result.error || "공개 시간표 삭제에 실패했습니다.");
+      if (!response.ok) {
+        if (response.status === 404) {
+          await loadSchedulesFromSupabase();
+          if (allSchedules.some(item => item.id === id)) {
+            throw new Error("서버에는 시간표가 남아 있지만 삭제할 수 없습니다.");
+          }
+        } else {
+          throw new Error(result.error || "공개 시간표 삭제에 실패했습니다.");
+        }
       }
     } else {
       if (!supabase) throw new Error("Supabase에 연결할 수 없습니다.");
-      const { error } = await supabase.from("schedules").delete().eq("id", id);
+      const { data: deletedRows, error } = await supabase
+        .from("schedules")
+        .delete()
+        .eq("id", id)
+        .select("id");
       if (error) throw error;
+      if (!deletedRows || deletedRows.length === 0) {
+        await loadSchedulesFromSupabase();
+        if (allSchedules.some(item => item.id === id)) {
+          throw new Error("삭제 권한이 없거나 서버에서 삭제되지 않았습니다.");
+        }
+      }
     }
   } catch (error) {
     return alert("시간표 삭제 실패: " + error.message);
   }
 
   allSchedules = allSchedules.filter(s => s.id !== id);
-  if (currentScheduleId === id && allSchedules.length > 0) {
-    currentScheduleId = allSchedules[0].id;
+  if (currentScheduleId === id) {
+    currentScheduleId = allSchedules.length > 0 ? allSchedules[0].id : null;
   }
   saveHubSchedules();
   renderDashboard();
@@ -1595,6 +1655,7 @@ async function initSupabase() {
       supabase.auth.onAuthStateChange((_event, session) => {
         handleAuthChange(session ? session.user : null);
       });
+      setupCrossBrowserScheduleSync();
     }
   } catch (e) {
     console.warn("[App] initSupabase notice:", e.message);
