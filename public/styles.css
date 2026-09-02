@@ -27,6 +27,12 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 body {
   background: var(--g-bg);
   color: var(--g-text);
@@ -34,6 +40,9 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 /* ==========================================
@@ -52,12 +61,17 @@ body {
   top: 0;
   z-index: 100;
   gap: 16px;
+  width: 100%;
+  max-width: 100%;
 }
 
 .g-header-left {
   display: flex;
   align-items: center;
   gap: 14px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .g-hamburger {
@@ -82,6 +96,14 @@ body {
   align-items: center;
   gap: 8px;
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.g-app-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Floating app status card (not used for incoming Web Push) */
@@ -169,7 +191,12 @@ body {
   display: flex;
   align-items: center;
   gap: 14px;
+  flex: 0 0 auto;
+  min-width: 0;
 }
+
+.g-header-right > * { flex-shrink: 0; }
+.g-header-right .btn { white-space: nowrap; }
 
 .g-version {
   font-size: 0.8rem;
@@ -199,6 +226,9 @@ body {
   display: flex;
   flex: 1;
   min-height: calc(100vh - 56px);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 /* Sidebar with Smooth Toggle */
@@ -271,10 +301,18 @@ body {
 
 /* Main Content */
 .g-main {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   padding: 24px 32px;
   overflow-y: auto;
   max-width: 1300px;
+}
+
+#view-dashboard,
+#view-editor,
+#view-push {
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* ==========================================
@@ -287,12 +325,15 @@ body {
   margin-bottom: 16px;
   flex-wrap: wrap;
   gap: 14px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .g-action-left {
   display: flex;
   align-items: center;
   gap: 20px;
+  min-width: 0;
 }
 
 .btn-new-fab {
@@ -311,6 +352,7 @@ body {
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   user-select: none;
+  flex-shrink: 0;
 }
 
 .btn-new-fab:hover {
@@ -335,6 +377,12 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+}
+
+.g-breadcrumb strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .g-breadcrumb-sub {
@@ -345,6 +393,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .g-pill-counter {
@@ -373,6 +422,9 @@ body {
   margin-bottom: 24px;
   overflow-x: auto;
   padding-bottom: 4px;
+  max-width: 100%;
+  min-width: 0;
+  overscroll-behavior-inline: contain;
 }
 
 .g-filter-chip {
@@ -407,6 +459,8 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 20px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .g-schedule-card-clean {
@@ -423,6 +477,8 @@ body {
   overflow: visible;
   z-index: 1;
   cursor: pointer;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .g-schedule-card-clean:hover {
@@ -465,11 +521,30 @@ body {
 }
 
 .card-clean-title {
+  min-width: 0;
   font-size: 1.05rem;
   font-weight: 600;
   color: var(--g-text);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+  min-width: 0;
+}
+
+.card-visibility-badge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -894,22 +969,81 @@ input:focus, select:focus { border-color: var(--g-blue); }
 
 /* Responsive adjustments */
 @media (max-width: 900px) {
+  .g-header { gap: 10px; }
+  .g-version { display: none; }
   .g-layout { flex-direction: column; }
   .g-sidebar {
-    width: 100%; border-right: none; border-bottom: 1px solid var(--g-border);
+    width: 100%; max-width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid var(--g-border);
     flex-direction: row; overflow-x: auto; padding: 8px 12px;
+    overscroll-behavior-inline: contain;
   }
   .g-sidebar.collapsed { width: 100% !important; display: none; }
   .g-sidebar-item { border-radius: 20px; width: auto; white-space: nowrap; margin-right: 0; }
   .g-sidebar-divider, .g-sidebar-section-title { display: none; }
-  .g-card-grid { grid-template-columns: 1fr; }
-  .g-main { padding: 16px; }
+  .g-card-grid { grid-template-columns: minmax(0, 1fr); }
+  .g-main { width: 100%; max-width: 100%; padding: 16px; overflow-x: hidden; }
 }
 
 @media (max-width: 560px) {
+  .g-header {
+    min-height: 56px;
+    height: auto;
+    padding: 7px 10px;
+    gap: 8px;
+  }
+  .g-header-left { gap: 6px; }
+  .g-hamburger { flex: 0 0 auto; padding: 4px; font-size: 1.2rem; }
+  .g-app-title { gap: 5px; font-size: 0.96rem; }
+  .g-app-title > span:first-child { font-size: 1.05rem !important; }
+  .g-app-subtitle { display: none; }
+  .g-header-right { gap: 5px; }
+  .g-header-right .btn {
+    padding: 6px 9px !important;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    writing-mode: horizontal-tb;
+  }
+  .g-avatar { width: 30px; height: 30px; font-size: 0.8rem; }
+  .g-sidebar { padding: 6px 8px; gap: 2px; }
+  .g-sidebar-item { padding: 8px 10px; gap: 6px; font-size: 0.8rem; }
+  .g-main { padding: 12px; }
+  .g-action-banner { align-items: stretch; gap: 10px; }
+  .g-action-left { width: 100%; gap: 10px; }
+  .btn-new-fab { height: 42px; padding: 0 12px; font-size: 0.82rem; }
+  .plus-icon { font-size: 1.15rem; }
+  .g-breadcrumb {
+    flex: 1 1 auto;
+    font-size: 0.92rem;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .g-breadcrumb > span { display: none; }
+  .g-breadcrumb strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .g-action-right { width: 100%; gap: 6px; }
+  .g-pill-counter { padding: 5px 10px; font-size: 0.74rem; }
+  .g-filter-bar { margin-bottom: 16px; }
+  .g-filter-chip { padding: 7px 12px; font-size: 0.78rem; }
+  .g-card-grid { gap: 12px; }
+  .g-schedule-card-clean { width: 100%; padding: 14px 12px; gap: 10px; }
+  .card-thumbnail-wrapper { width: 56px; height: 56px; }
+  .mini-thumb-svg { width: 48px; height: 48px; }
+  .card-title-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+  }
+  .card-clean-title { max-width: 100%; font-size: 0.98rem; }
+  .card-visibility-badge { font-size: 0.66rem; padding: 2px 6px; }
+  .card-clean-meta { flex-wrap: wrap; gap: 3px 6px; }
+  .btn-horizontal-dots { padding: 5px; }
   .form-grid { grid-template-columns: 1fr; }
   .form-group.full { grid-column: span 1; }
   .title-input { font-size: 1.1rem; }
   .action-bar .btn { flex: 1 1 calc(50% - 8px); }
-  .btn-new-fab { padding: 0 18px; font-size: 0.88rem; }
 }

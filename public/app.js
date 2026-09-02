@@ -533,8 +533,8 @@ function renderDashboard() {
       ? currentUserIsAdmin
       : Boolean(currentUser && schedule.user_id === currentUser.id);
     const visibilityBadge = isPrivate
-      ? `<span style="background:#f3e8ff; color:#7e22ce; font-size:0.72rem; font-weight:700; padding:2px 8px; border-radius:10px; border:1px solid #e9d5ff;">🔒 나만 보기 (Private)</span>`
-      : `<span style="background:#ecfdf5; color:#047857; font-size:0.72rem; font-weight:700; padding:2px 8px; border-radius:10px; border:1px solid #a7f3d0;">🌐 공개 (Public)</span>`;
+      ? `<span class="card-visibility-badge" style="background:#f3e8ff; color:#7e22ce; border-color:#e9d5ff;">🔒 나만 보기 (Private)</span>`
+      : `<span class="card-visibility-badge" style="background:#ecfdf5; color:#047857; border-color:#a7f3d0;">🌐 공개 (Public)</span>`;
 
     const dateStr = schedule.updatedAt ? new Date(schedule.updatedAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '방금 전';
 
@@ -546,7 +546,7 @@ function renderDashboard() {
 
       <!-- 2. Card Details (Title, Visibility & Items) -->
       <div class="card-details-wrapper" onclick="openScheduleEditor('${schedule.id}')">
-        <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
+        <div class="card-title-row">
           <div class="card-clean-title" title="${escapeHtml(schedule.title)}">
             ${escapeHtml(schedule.title)}
           </div>
