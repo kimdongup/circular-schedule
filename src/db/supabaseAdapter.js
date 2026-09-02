@@ -99,9 +99,9 @@ class SupabaseAdapter {
   async getSubscriptions(appKey, userId = null) {
     let query = this.requireClient()
       .from('subscriptions')
-      .select('*')
-      .eq('app_key', appKey);
+      .select('*');
 
+    if (appKey) query = query.eq('app_key', appKey);
     if (userId) query = query.eq('user_id', userId);
 
     const { data, error } = await query;

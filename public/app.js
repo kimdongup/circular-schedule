@@ -986,12 +986,9 @@ function setupEvents() {
   $("nav-push").addEventListener("click", async () => {
     $("push-modal").style.display = "flex";
     const subscribeButton = $("btn-toggle-push-sub");
-    const sendButton = $("btn-send-test-push");
     subscribeButton.disabled = true;
-    sendButton.disabled = true;
     const appsLoaded = await loadAvailableApps();
     subscribeButton.disabled = !appsLoaded;
-    sendButton.disabled = !appsLoaded;
     await updatePushStatusUI();
   });
   $("btn-back-to-dashboard").addEventListener("click", showDashboardView);
@@ -1349,51 +1346,6 @@ function setupEvents() {
     } finally {
       btn.disabled = false;
       await updatePushStatusUI();
-    }
-  });
-
-  $("btn-send-test-push").addEventListener("click", async () => {
-    const selectedKey = $("push-select-app") ? $("push-select-app").value : "";
-    if (!selectedKey) return alert("푸시를 보낼 앱을 먼저 선택해 주세요.");
-    const userId = $("push-user-id").value.trim();
-    const title = $("schedule-title").value || "나의 일주일 시간표";
-    const btn = $("btn-send-test-push");
-    btn.disabled = true;
-    btn.textContent = "발송 중...";
-
-    try {
-      const { data: { session } } = supabase
-        ? await supabase.auth.getSession()
-        : { data: { session: null } };
-      const res = await fetch("/api/v1/push", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(session ? { Authorization: `Bearer ${session.access_token}` } : {})
-        },
-        body: JSON.stringify({
-          app_key: selectedKey,
-          user_id: userId || null,
-          title: `⏰ [시간표 알림] ${title}`,
-          body: `잠시 후 등록된 활동 일정이 시작됩니다! (앱: ${selectedKey})`,
-          url: "/"
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        if (data.deliveredCount > 0) {
-          alert(`✅ [서버 전송 성공] 총 ${data.deliveredCount}대의 기기로 푸시가 성공적으로 전송되었습니다!`);
-        } else {
-          alert(`[${selectedKey}] 키로 구독 중인 기기를 찾을 수 없습니다. 먼저 [🔔 웹 푸시 알림 받기]를 완료해 주세요.`);
-        }
-      } else {
-        alert("발송 실패: " + (data.error || "알 수 없는 오류"));
-      }
-    } catch (err) {
-      alert("발송 통신 오류: " + err.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "🚀 나에게 테스트 푸시 보내기";
     }
   });
 

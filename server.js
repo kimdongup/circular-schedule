@@ -351,10 +351,7 @@ app.post('/api/v1/push', requireAdminAuth, async (req, res) => {
 app.get('/api/v1/subscriptions', requireAdminAuth, async (req, res) => {
   try {
     const { app_key, user_id } = req.query;
-    if (!app_key) {
-      return res.status(400).json({ success: false, error: 'app_key query parameter is required' });
-    }
-    const subscriptions = await db.getSubscriptions(app_key, user_id || null);
+    const subscriptions = await db.getSubscriptions(app_key || null, user_id || null);
     res.json({ success: true, count: subscriptions.length, subscriptions });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

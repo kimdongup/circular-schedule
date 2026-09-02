@@ -159,9 +159,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 4. Load All Dashboard Data
   async function loadAllDashboardData() {
+    await loadApps();
     await Promise.all([
       loadStats(),
-      loadApps(),
       loadSubscriptions(),
       loadLogs(),
       loadUserRoles()
@@ -198,8 +198,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       const res = await fetchWithAuth('/api/v1/apps');
       const data = await res.json();
       if (data.success && data.apps) {
-        const currentVal1 = selectAppKey || adminTargetApp.value;
-        const currentVal2 = selectAppKey || filterSubApp.value;
+        const appKeys = data.apps.map(app => app.app_key);
+        const requestedTarget = selectAppKey || adminTargetApp.value;
+        const requestedFilter = selectAppKey || filterSubApp.value;
 
         adminTargetApp.innerHTML = '';
         filterSubApp.innerHTML = '<option value="">전체 App Key</option>';
@@ -216,8 +217,9 @@ document.addEventListener('DOMContentLoaded', async () => {
           filterSubApp.appendChild(opt2);
         });
 
-        if (currentVal1) adminTargetApp.value = currentVal1;
-        if (currentVal2) filterSubApp.value = currentVal2;
+        const targetAppKey = appKeys.includes(requestedTarget) ? requestedTarget : appKeys[0];
+        if (targetAppKey) adminTargetApp.value = targetAppKey;
+        if (appKeys.includes(requestedFilter)) filterSubApp.value = requestedFilter;
 
         adminAppsTbody.innerHTML = '';
         if (data.apps.length === 0) {
@@ -341,11 +343,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     let url = '/api/v1/subscriptions';
     if (selectedApp) {
       url += `?app_key=${encodeURIComponent(selectedApp)}`;
-    } else if (adminTargetApp.value) {
-      url += `?app_key=${encodeURIComponent(adminTargetApp.value)}`;
-    } else {
-      adminSubsTbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color: var(--text-muted);">조회할 App Key를 선택하세요.</td></tr>';
-      return;
     }
 
     try {
