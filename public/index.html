@@ -163,8 +163,8 @@
             <button type="button" id="btn-load-sample" class="btn btn-secondary">📋 샘플 불러오기</button>
             <button type="button" id="btn-download-png" class="btn btn-outline">💾 이미지 저장(PNG)</button>
             <button type="button" id="btn-share" class="btn btn-secondary">🔗 공유 링크 생성</button>
-            <button type="button" id="btn-cloud-save" class="btn btn-success" style="display:none;">☁️ 클라우드 저장</button>
-            <button type="button" id="btn-clear-schedule" class="btn btn-outline-danger">🗑️ 시간표 비우기</button>
+            <button type="button" id="btn-cloud-save" class="btn btn-success" style="display:none;">저장</button>
+            <button type="button" id="btn-clear-schedule" class="btn btn-outline-danger">삭제</button>
           </div>
         </div>
 
@@ -210,10 +210,16 @@
               <div class="form-group full">
                 <label for="input-color">대표 색상</label>
                 <div class="color-picker-row">
-                  <input type="color" id="input-color" value="#FF6B6B" />
-                  <span id="color-hex">#FF6B6B</span>
-                  <div class="swatches" id="color-swatches"></div>
+                  <div id="color-spectrum-track" class="color-spectrum-track" role="slider" tabindex="0" aria-label="적외선부터 자외선까지 색상 선택" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <canvas id="color-spectrum" class="color-spectrum" width="720" height="48" aria-hidden="true"></canvas>
+                    <span id="color-spectrum-marker" class="color-spectrum-marker" aria-hidden="true"></span>
+                  </div>
+                  <div class="color-picker-value">
+                    <input type="color" id="input-color" value="#FF6B6B" title="선택 색상 미세 조정" />
+                    <span id="color-hex">#FF6B6B</span>
+                  </div>
                 </div>
+                <p class="hint">왼쪽 적외선(빨강)부터 오른쪽 자외선(보라)까지 원하는 지점을 누르세요.</p>
               </div>
             </div>
 

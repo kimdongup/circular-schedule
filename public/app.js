@@ -14,7 +14,7 @@ const HUB_STORAGE_KEY = "CIRCULAR_SCHEDULE_HUB_V2";
 
 const DAYS = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"];
 const DAY_SHORT = ["월", "화", "수", "목", "금", "토", "일"];
-const PALETTE = ["#FF6B6B", "#51CF66", "#ADB5BD", "#FCC419", "#B197FC", "#339AF0", "#F06595", "#FF922B", "#00008B"];
+const SPECTRUM_MAX_HUE = 280;
 
 const SAMPLE_ITEMS = [
   sample("학교수업", 10, 14, [0, 1, 2, 3, 4], "#FF6B6B"),
@@ -387,12 +387,14 @@ async function loadSchedulesFromSupabase() {
 
 // Save or Upsert Schedule to Supabase
 async function saveScheduleToSupabase(schedule) {
-  if (!supabase) return;
+  if (!supabase) return false;
   try {
     const isPublic = schedule.is_public !== undefined ? schedule.is_public : (currentUser ? false : true);
-    const userId = currentUser ? currentUser.id : null;
+    const userId = schedule.user_id || null;
+    if (isPublic && currentUser && !currentUserIsAdmin) return false;
+    if (!isPublic && (!currentUser || userId !== currentUser.id)) return false;
 
-    await supabase.from("schedules").upsert({
+    const { error } = await supabase.from("schedules").upsert({
       id: schedule.id,
       user_id: userId,
       title: schedule.title,
@@ -400,8 +402,11 @@ async function saveScheduleToSupabase(schedule) {
       is_public: isPublic,
       updated_at: new Date().toISOString()
     }, { onConflict: "id" });
+    if (error) throw error;
+    return true;
   } catch (e) {
     console.warn("[App] saveScheduleToSupabase error:", e.message);
+    return false;
   }
 }
 
@@ -659,9 +664,13 @@ window.deleteSchedule = async function(id) {
   }
 
   allSchedules = allSchedules.filter(s => s.id !== id);
+  if (currentScheduleId === id && allSchedules.length > 0) {
+    currentScheduleId = allSchedules[0].id;
+  }
   saveHubSchedules();
   renderDashboard();
   showStatusMessage(`🗑️ '${schedule.title}' 시간표가 삭제되었습니다.`);
+  return true;
 };
 
 window.renameSchedule = function(id) {
@@ -717,19 +726,16 @@ function showEditorView() {
   $("nav-editor").classList.add("active");
 }
 
-function syncCurrentScheduleToHub() {
+function syncCurrentScheduleToHub({ persistRemote = true } = {}) {
   const current = getScheduleById(currentScheduleId);
   if (current) {
     current.title = $("schedule-title").value || "나의 일주일 시간표";
     current.items = items;
     current.updatedAt = new Date().toISOString();
-    if (currentUser) {
-      current.user_id = currentUser.id;
-      current.is_public = false;
-    }
     saveHubSchedules();
-    saveScheduleToSupabase(current);
+    if (persistRemote) saveScheduleToSupabase(current);
   }
+  return current || null;
 }
 
 // ==========================================
@@ -1001,24 +1007,95 @@ function setSelectedDays(days) {
   });
 }
 
-function setupColorSwatches() {
-  const container = $("color-swatches");
-  if (!container) return;
-  container.innerHTML = "";
+function hslToHex(hue, saturation = 100, lightness = 50) {
+  const s = saturation / 100;
+  const l = lightness / 100;
+  const chroma = (1 - Math.abs(2 * l - 1)) * s;
+  const section = hue / 60;
+  const x = chroma * (1 - Math.abs((section % 2) - 1));
+  let rgb = [0, 0, 0];
 
-  PALETTE.forEach(color => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "swatch";
-    btn.style.backgroundColor = color;
-    btn.addEventListener("click", () => {
-      $("input-color").value = color;
-      $("color-hex").textContent = color;
-      document.querySelectorAll(".swatch").forEach(s => s.classList.remove("active"));
-      btn.classList.add("active");
-    });
-    container.appendChild(btn);
+  if (section < 1) rgb = [chroma, x, 0];
+  else if (section < 2) rgb = [x, chroma, 0];
+  else if (section < 3) rgb = [0, chroma, x];
+  else if (section < 4) rgb = [0, x, chroma];
+  else if (section < 5) rgb = [x, 0, chroma];
+  else rgb = [chroma, 0, x];
+
+  const offset = l - chroma / 2;
+  return `#${rgb.map(value => Math.round((value + offset) * 255).toString(16).padStart(2, "0")).join("")}`.toUpperCase();
+}
+
+function hexToHue(hex) {
+  const normalized = String(hex).replace("#", "");
+  if (!/^[0-9a-f]{6}$/i.test(normalized)) return 0;
+  const [r, g, b] = [0, 2, 4].map(index => parseInt(normalized.slice(index, index + 2), 16) / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  if (delta === 0) return 0;
+
+  let hue;
+  if (max === r) hue = 60 * (((g - b) / delta) % 6);
+  else if (max === g) hue = 60 * (((b - r) / delta) + 2);
+  else hue = 60 * (((r - g) / delta) + 4);
+  return hue < 0 ? hue + 360 : hue;
+}
+
+function setActiveColor(color, markerRatio = null) {
+  const input = $("input-color");
+  const output = $("color-hex");
+  const marker = $("color-spectrum-marker");
+  const track = $("color-spectrum-track");
+  const normalized = String(color).toUpperCase();
+  if (input) input.value = normalized;
+  if (output) output.textContent = normalized;
+
+  let ratio = markerRatio;
+  if (ratio === null) ratio = Math.min(1, hexToHue(normalized) / SPECTRUM_MAX_HUE);
+  ratio = Math.max(0, Math.min(1, ratio));
+  if (marker) marker.style.left = `${ratio * 100}%`;
+  if (track) {
+    track.setAttribute("aria-valuenow", String(Math.round(ratio * 100)));
+    track.setAttribute("aria-valuetext", normalized);
+  }
+}
+
+function setupColorSpectrum() {
+  const track = $("color-spectrum-track");
+  const canvas = $("color-spectrum");
+  const input = $("input-color");
+  if (!track || !canvas || !input) return;
+
+  const context = canvas.getContext("2d");
+  for (let x = 0; x < canvas.width; x += 1) {
+    const hue = (x / (canvas.width - 1)) * SPECTRUM_MAX_HUE;
+    context.fillStyle = `hsl(${hue} 100% 50%)`;
+    context.fillRect(x, 0, 1, canvas.height);
+  }
+
+  const selectAtPointer = (event) => {
+    const rect = track.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    setActiveColor(hslToHex(ratio * SPECTRUM_MAX_HUE), ratio);
+  };
+
+  track.addEventListener("pointerdown", (event) => {
+    track.setPointerCapture(event.pointerId);
+    selectAtPointer(event);
   });
+  track.addEventListener("pointermove", (event) => {
+    if (track.hasPointerCapture(event.pointerId)) selectAtPointer(event);
+  });
+  track.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const current = Number(track.getAttribute("aria-valuenow") || 0);
+    const next = Math.max(0, Math.min(100, current + (event.key === "ArrowRight" ? 1 : -1)));
+    setActiveColor(hslToHex((next / 100) * SPECTRUM_MAX_HUE), next / 100);
+  });
+  input.addEventListener("input", () => setActiveColor(input.value));
+  setActiveColor(input.value);
 }
 
 function setupEvents() {
@@ -1124,8 +1201,7 @@ function setupEvents() {
     $("input-title").value = item.title;
     setTimeDropdownsFromDec(item.start, item.end);
     setSelectedDays(item.days);
-    $("input-color").value = item.color;
-    $("color-hex").textContent = item.color;
+    setActiveColor(item.color);
     $("btn-submit-activity").textContent = "💾 수정 완료";
     $("btn-cancel-edit").style.display = "inline-block";
   });
@@ -1146,15 +1222,9 @@ function setupEvents() {
     renderSchedule();
   });
 
-  $("btn-clear-schedule").addEventListener("click", () => {
-    if (confirm("시간표의 모든 활동을 지울까요?")) {
-      items = [];
-      selectedItemId = null;
-      $("detail-card").style.display = "none";
-      saveLocal();
-      renderList();
-      renderSchedule();
-    }
+  $("btn-clear-schedule").addEventListener("click", async () => {
+    const deleted = await window.deleteSchedule(currentScheduleId);
+    if (deleted) showDashboardView();
   });
 
   $("activity-list-toggle").addEventListener("click", () => {
@@ -1205,12 +1275,29 @@ function setupEvents() {
     btnDownloadPng.addEventListener("click", downloadSvgAsPng);
   }
 
-  // Cloud Save for logged-in users
+  // Save the entire current schedule for logged-in users
   const btnCloudSave = $("btn-cloud-save");
   if (btnCloudSave) {
     btnCloudSave.addEventListener("click", async () => {
-      syncCurrentScheduleToHub();
-      showStatusMessage("☁️ 클라우드 저장이 완료되었습니다.");
+      const current = syncCurrentScheduleToHub({ persistRemote: false });
+      if (!current) return alert("저장할 시간표를 찾을 수 없습니다.");
+
+      const isPublic = current.is_public === true || !current.user_id;
+      if (isPublic && !currentUserIsAdmin) {
+        return alert("공개 시간표는 관리자만 저장할 수 있습니다.");
+      }
+      if (!isPublic && (!currentUser || current.user_id !== currentUser.id)) {
+        return alert("본인의 비공개 시간표만 저장할 수 있습니다.");
+      }
+
+      btnCloudSave.disabled = true;
+      btnCloudSave.textContent = "저장 중...";
+      const saved = await saveScheduleToSupabase(current);
+      btnCloudSave.disabled = false;
+      btnCloudSave.textContent = "저장";
+
+      if (!saved) return alert("시간표 저장에 실패했습니다. 네트워크 연결과 로그인 상태를 확인해 주세요.");
+      showStatusMessage(`💾 '${current.title}' 시간표가 저장되었습니다.`);
     });
   }
 
@@ -1560,7 +1647,7 @@ async function checkAdminRole(userId, email) {
 
 async function init() {
   setupTimeDropdowns();
-  setupColorSwatches();
+  setupColorSpectrum();
   setupEvents();
   loadLocalSchedule();
   renderDashboard();
