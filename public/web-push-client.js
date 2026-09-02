@@ -168,6 +168,34 @@
       return true;
     }
 
+    async registerExistingSubscription() {
+      if (!this.isSupported() || !this.appKey) return false;
+
+      const registration = this.swRegistration
+        || await navigator.serviceWorker.getRegistration(this.scope);
+      if (!registration) return false;
+
+      const subscription = await registration.pushManager.getSubscription();
+      if (!subscription) return false;
+
+      const publicKey = await this.getVapidPublicKey();
+      if (!keysMatch(subscription, urlBase64ToUint8Array(publicKey))) return false;
+
+      const response = await fetch(`${this.serverUrl}/api/v1/subscribe`, {
+        method: 'POST',
+        headers: await this.getAuthHeaders(),
+        body: JSON.stringify({
+          app_key: this.appKey,
+          subscription: subscription.toJSON()
+        })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '기존 푸시 구독을 서버에 다시 등록하지 못했습니다.');
+      }
+      return true;
+    }
+
     async getSubscriptionStatus() {
       if (!this.isSupported()) return { supported: false, subscribed: false };
 

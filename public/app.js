@@ -86,6 +86,7 @@ const DEFAULT_PRESET_SCHEDULES = [
 
 let supabase = null;
 let currentUser = null;
+let currentAuthSession = null;
 let currentUserIsAdmin = false;
 let currentScheduleId = "preset-1";
 let allSchedules = [];
@@ -1457,6 +1458,8 @@ function setupEvents() {
 
   window.doLogout = async function() {
     if (supabase) await supabase.auth.signOut();
+    currentAuthSession = null;
+    await handleAuthChange(null, null);
   };
 
   window.doLogin = async function() {
@@ -1467,12 +1470,13 @@ function setupEvents() {
     const password = $("auth-password").value.trim();
     if (!email || !password) return alert("이메일과 비밀번호를 모두 입력해 주세요.");
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) alert("로그인 실패: " + error.message);
     else {
+      currentAuthSession = data.session;
+      await handleAuthChange(data.user, data.session);
       window.closeAuthModal();
       showStatusMessage(`🎉 '${email}' 계정으로 로그인되었습니다.`);
-      await loadSchedulesFromSupabase();
     }
   };
 
@@ -1484,9 +1488,15 @@ function setupEvents() {
     const password = $("auth-password").value.trim();
     if (!email || !password) return alert("이메일과 비밀번호를 모두 입력해 주세요.");
 
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) alert("가입 실패: " + error.message);
-    else alert("가입 완료! 자동 로그인되었습니다.");
+    else {
+      if (data.session) {
+        currentAuthSession = data.session;
+        await handleAuthChange(data.user, data.session);
+      }
+      alert(data.session ? "가입 완료! 자동 로그인되었습니다." : "가입 완료! 이메일 인증 후 로그인해 주세요.");
+    }
   };
 
   const btnLoginModal = $("btn-login-modal");
@@ -1514,11 +1524,7 @@ function setupEvents() {
   if (typeof WebPushClient !== "undefined") {
     webPushClient = new WebPushClient({
       serverUrl: window.location.origin,
-      accessTokenProvider: async () => {
-        if (!supabase || !currentUser) return null;
-        const { data: { session } } = await supabase.auth.getSession();
-        return session ? session.access_token : null;
-      }
+      accessTokenProvider: async () => currentAuthSession ? currentAuthSession.access_token : null
     });
     webPushClient.registerServiceWorker().catch((error) => {
       console.info("[Web Push] Service Worker registration skipped:", error.message);
@@ -1544,7 +1550,15 @@ function setupEvents() {
     try {
       const selectedApp = $("push-select-app");
       webPushClient.appKey = selectedApp ? selectedApp.value : '';
-      const status = await webPushClient.getSubscriptionStatus();
+      let status = await webPushClient.getSubscriptionStatus();
+      if (status.subscribed && !status.serverRegistered && currentAuthSession && webPushClient.appKey) {
+        try {
+          const restored = await webPushClient.registerExistingSubscription();
+          if (restored) status = { ...status, serverRegistered: true };
+        } catch (restoreError) {
+          console.warn("[Web Push] Existing subscription restore failed:", restoreError.message);
+        }
+      }
       const sup = $("push-stat-supported");
       const perm = $("push-stat-permission");
       const sub = $("push-stat-subscribed");
@@ -1651,9 +1665,14 @@ async function initSupabase() {
       }
       supabase = window.supabase.createClient(supabaseUrl, supabasePublishableKey);
       const { data: { session } } = await supabase.auth.getSession();
-      await handleAuthChange(session ? session.user : null);
-      supabase.auth.onAuthStateChange((_event, session) => {
-        handleAuthChange(session ? session.user : null);
+      currentAuthSession = session;
+      await handleAuthChange(session ? session.user : null, session);
+      supabase.auth.onAuthStateChange((_event, nextSession) => {
+        // 인증 콜백 안에서 다시 getSession()을 호출하면 토큰 갱신이 교착될 수 있습니다.
+        currentAuthSession = nextSession;
+        window.setTimeout(() => {
+          handleAuthChange(nextSession ? nextSession.user : null, nextSession);
+        }, 0);
       });
       setupCrossBrowserScheduleSync();
     }
@@ -1662,9 +1681,11 @@ async function initSupabase() {
   }
 }
 
-async function handleAuthChange(user) {
+async function handleAuthChange(user, session = currentAuthSession) {
+  const previousUserId = currentUser ? currentUser.id : null;
   currentUser = user;
-  currentUserIsAdmin = false;
+  currentAuthSession = session;
+  if (!user || previousUserId !== user.id) currentUserIsAdmin = false;
   const userDisplay = $("user-display");
   const loginBtn = $("btn-login-modal");
   const logoutBtn = $("btn-logout");
@@ -1685,8 +1706,9 @@ async function handleAuthChange(user) {
       avatar.textContent = user.email.charAt(0).toUpperCase();
       avatar.title = user.email;
     }
-    await checkAdminRole(user.id, user.email);
+    await checkAdminRole(session);
   } else {
+    currentUserIsAdmin = false;
     if (userDisplay) userDisplay.textContent = "게스트 모드 (공개 저장)";
     if (loginBtn) loginBtn.style.display = "inline-block";
     if (logoutBtn) logoutBtn.style.display = "none";
@@ -1721,11 +1743,10 @@ async function handleAuthChange(user) {
   renderDashboard();
 }
 
-async function checkAdminRole(userId, email) {
+async function checkAdminRole(session = currentAuthSession) {
   const adminBtn = $("btn-admin-panel-link");
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+    if (!session || !session.access_token) {
       currentUserIsAdmin = false;
       if (adminBtn) adminBtn.style.display = "none";
       return;
@@ -1738,8 +1759,8 @@ async function checkAdminRole(userId, email) {
     currentUserIsAdmin = Boolean(data.success && data.isAdmin);
     if (adminBtn) adminBtn.style.display = currentUserIsAdmin ? "inline-flex" : "none";
   } catch (e) {
-    currentUserIsAdmin = false;
-    if (adminBtn) adminBtn.style.display = "none";
+    // 동일 세션의 일시적인 네트워크 오류만으로 이미 확인된 관리자 상태를 지우지 않습니다.
+    if (adminBtn) adminBtn.style.display = currentUserIsAdmin ? "inline-flex" : "none";
   }
 }
 
