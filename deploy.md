@@ -13,14 +13,14 @@
 
 1. Supabase Dashboard에서 사용할 프로젝트를 엽니다.
 2. `SQL Editor`에서 저장소의 `supabase_schema.sql` 전체를 실행합니다.
-3. `Project Settings → API`에서 다음 값을 준비합니다.
+3. `Project Settings → API Keys`의 `Publishable and secret API keys`에서 다음 값을 준비합니다.
    - Project URL
-   - anon/public key
-   - service_role key
-4. `Authentication → URL Configuration`에서 Site URL을 새 Vercel 운영 주소로 변경합니다.
-5. 필요한 Preview 주소 또는 사용자 지정 도메인을 Redirect URLs에 추가합니다.
+   - Publishable key (`sb_publishable_...`)
+   - Secret key (`sb_secret_...`)
+4. `Authentication → URL Configuration`에서 Site URL을 `https://kimdongup-circular-schedule.vercel.app`으로 변경합니다.
+5. Redirect URLs에도 `https://kimdongup-circular-schedule.vercel.app/**`를 추가합니다.
 
-`service_role` 키는 서버 전용 비밀입니다. HTML, 브라우저 JavaScript, Git 저장소에 넣으면 안 됩니다.
+`Legacy anon, service_role API keys`의 키는 사용하지 않습니다. `Secret key`는 서버 전용 비밀이며 HTML, 브라우저 JavaScript, Git 저장소에 넣으면 안 됩니다.
 
 ## 2. VAPID 키 재발급
 
@@ -45,8 +45,8 @@ npm run check
 
 ## 4. Vercel에 새 프로젝트 생성
 
-1. https://vercel.com/new 에서 `GithubID/YOUR-PROJECT` 저장소를 Import합니다.
-2. Project Name은 `YOUR-PROJECT`을 먼저 시도합니다. 사용할 수 없다면 Vercel이 제안한 다른 이름을 사용합니다.
+1. https://vercel.com/new 에서 `kimdongup/circular-schedule` 저장소를 Import합니다.
+2. Project Name은 `kimdongup-circular-schedule`을 사용합니다.
 3. Production Branch는 `main`으로 지정합니다.
 4. Root Directory는 저장소 루트인 `./`로 둡니다.
 5. Framework Preset은 자동 감지된 Express 설정을 사용합니다.
@@ -64,35 +64,43 @@ Vercel은 루트의 `server.js`가 내보내는 Express 앱을 하나의 Functio
 | 이름 | 용도 | 필수 |
 |---|---|---|
 | `SUPABASE_URL` | Supabase Project URL | 예 |
-| `SUPABASE_ANON_KEY` | 브라우저 로그인 및 시간표 RLS 접근 | 예 |
-| `SUPABASE_SERVICE_ROLE_KEY` | Vercel 서버의 DB 접근 | 예 |
+| `SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_...`; 브라우저 로그인 및 시간표 RLS 접근 | 예 |
+| `SUPABASE_SECRET_KEY` | `sb_secret_...`; Vercel 서버의 DB 접근 및 RLS 우회 | 예 |
 | `ADMIN_EMAILS` | 쉼표로 구분한 관리자 이메일 | 예 |
 | `VAPID_PUBLIC_KEY` | Web Push 공개키 | 푸시 사용 시 예 |
 | `VAPID_PRIVATE_KEY` | Web Push 개인키 | 푸시 사용 시 예 |
 | `VAPID_SUBJECT` | `mailto:admin@example.com` 형식 | 푸시 사용 시 예 |
 
-환경 변수를 추가하거나 변경한 뒤에는 새로 Redeploy해야 적용됩니다.
+이 프로젝트의 Supabase 값은 다음 형식으로 입력합니다.
+
+```env
+SUPABASE_URL=https://jtwjwbqgwreyyhjfoptj.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_전체값
+SUPABASE_SECRET_KEY=sb_secret_전체값
+```
+
+키 화면에 일부만 표시된 문자열을 직접 드래그하지 말고 Copy 버튼으로 전체 값을 복사합니다. 기존 `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` 환경 변수는 새 코드에서 읽지 않으므로 Vercel에서 제거합니다. 환경 변수를 추가하거나 변경한 뒤에는 Production을 Redeploy해야 적용됩니다.
 
 ## 6. 배포 검증
 
 배포가 `Ready`가 되면 실제 Production URL로 다음 경로를 확인합니다.
 
 ```bash
-curl -i https://YOUR-PROJECT.vercel.app/
-curl -i https://YOUR-PROJECT.vercel.app/health
-curl -i https://YOUR-PROJECT.vercel.app/api/config
-curl -i https://YOUR-PROJECT.vercel.app/api/v1/apps
-curl -i https://YOUR-PROJECT.vercel.app/server-admin
-curl -i https://YOUR-PROJECT.vercel.app/manifest.json
-curl -i https://YOUR-PROJECT.vercel.app/sw.js
-curl -i https://YOUR-PROJECT.vercel.app/s/test
+curl -i https://kimdongup-circular-schedule.vercel.app/
+curl -i https://kimdongup-circular-schedule.vercel.app/health
+curl -i https://kimdongup-circular-schedule.vercel.app/api/config
+curl -i https://kimdongup-circular-schedule.vercel.app/api/v1/apps
+curl -i https://kimdongup-circular-schedule.vercel.app/server-admin
+curl -i https://kimdongup-circular-schedule.vercel.app/manifest.json
+curl -i https://kimdongup-circular-schedule.vercel.app/sw.js
+curl -i https://kimdongup-circular-schedule.vercel.app/s/test
 ```
 
 정상 기준은 다음과 같습니다.
 
 - `/` : 200, `원형 시간표 관리 허브` HTML
 - `/health` : 200, `databaseConfigured: true`
-- `/api/config` : 200, Supabase URL과 anon key 반환
+- `/api/config` : 200, `supabaseUrl`과 `supabasePublishableKey` 반환
 - `/api/v1/apps` : 200, 앱 목록 JSON
 - `/server-admin` 및 `/admin/` : 관리자 로그인 화면
 - `/manifest.json` 및 `/sw.js` : 200, PWA 설치와 시스템 알림 수신 파일
@@ -113,12 +121,12 @@ Web Push 수신 확인은 `/`의 `푸시 알림 설정`에서 구독한 다음 �
 ### `FUNCTION_INVOCATION_FAILED`
 
 - Vercel Dashboard의 `Logs`에서 첫 번째 uncaught exception을 확인합니다.
-- `SUPABASE_URL`과 `SUPABASE_SERVICE_ROLE_KEY` 누락 여부를 확인합니다.
+- `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` 누락 여부를 확인합니다.
 - 환경 변수를 추가한 뒤 Redeploy했는지 확인합니다.
 
 ### `/health`가 503인 경우
 
-Supabase 서버 설정이 빠진 상태입니다. `SUPABASE_URL`과 `SUPABASE_SERVICE_ROLE_KEY`를 등록하고 Redeploy합니다.
+Supabase 설정이 빠진 상태입니다. `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`를 등록하고 Redeploy합니다.
 
 ### 관리자 로그인이 되지만 권한이 없는 경우
 

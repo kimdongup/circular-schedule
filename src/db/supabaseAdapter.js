@@ -2,9 +2,9 @@ const { createClient } = require('@supabase/supabase-js');
 
 class SupabaseAdapter {
   constructor(options = {}) {
-    this.supabaseUrl = options.supabaseUrl || process.env.SUPABASE_URL;
-    this.supabaseKey = options.supabaseKey || process.env.SUPABASE_SERVICE_ROLE_KEY;
-    this.client = this.supabaseUrl && this.supabaseKey
+    this.supabaseUrl = (options.supabaseUrl || process.env.SUPABASE_URL || '').trim();
+    this.supabaseKey = (options.supabaseKey || process.env.SUPABASE_SECRET_KEY || '').trim();
+    this.client = this.supabaseUrl && this.supabaseKey.startsWith('sb_secret_')
       ? createClient(this.supabaseUrl, this.supabaseKey, {
           auth: { autoRefreshToken: false, persistSession: false }
         })
@@ -17,7 +17,7 @@ class SupabaseAdapter {
 
   requireClient() {
     if (!this.client) {
-      throw new Error('Supabase server configuration is missing. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
+      throw new Error('Supabase server configuration is missing or invalid. Set SUPABASE_URL and SUPABASE_SECRET_KEY.');
     }
     return this.client;
   }

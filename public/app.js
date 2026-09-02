@@ -1421,13 +1421,13 @@ async function loadAvailableApps() {
 async function initSupabase() {
   try {
     const configRes = await fetch("/api/config");
-    const { supabaseUrl, supabaseAnonKey } = await configRes.json();
-    if (supabaseUrl && supabaseAnonKey) {
+    const { supabaseUrl, supabasePublishableKey } = await configRes.json();
+    if (supabaseUrl && supabasePublishableKey) {
       if (!window.supabase) {
         const mod = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
         window.supabase = mod;
       }
-      supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+      supabase = window.supabase.createClient(supabaseUrl, supabasePublishableKey);
       const { data: { session } } = await supabase.auth.getSession();
       if (session) handleAuthChange(session.user);
       supabase.auth.onAuthStateChange((_event, session) => {

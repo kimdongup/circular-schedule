@@ -52,15 +52,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function initAuth() {
     try {
       const configRes = await fetch('/api/config');
-      const { supabaseUrl, supabaseAnonKey } = await configRes.json();
+      const { supabaseUrl, supabasePublishableKey } = await configRes.json();
 
-      if (supabaseUrl && supabaseAnonKey) {
+      if (supabaseUrl && supabasePublishableKey) {
         // Dynamically load Supabase SDK if not loaded
         if (!window.supabase) {
           const mod = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
           window.supabase = mod;
         }
-        supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+        supabase = window.supabase.createClient(supabaseUrl, supabasePublishableKey);
 
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {

@@ -12,6 +12,11 @@ const { sendNotificationToSubscriptions } = require('./src/pushService');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0';
+const SUPABASE_URL = (process.env.SUPABASE_URL || '').trim();
+const SUPABASE_PUBLISHABLE_KEY = (process.env.SUPABASE_PUBLISHABLE_KEY || '').trim();
+const isSupabaseAuthConfigured = Boolean(
+  SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY.startsWith('sb_publishable_')
+);
 
 const nanoid = customAlphabet('1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', 6);
 
@@ -43,9 +48,9 @@ async function verifyAdminUser(req) {
     return { isAdmin: false, error: '로그인 토큰이 제공되지 않았습니다.' };
   }
 
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+  if (isSupabaseAuthConfigured) {
     try {
-      const supabaseAuth = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+      const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
         auth: { autoRefreshToken: false, persistSession: false }
       });
       const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
@@ -376,11 +381,12 @@ app.get('/api/v1/admin/users', requireAdminAuth, async (req, res) => {
 
 // 헬스 체크
 app.get('/health', (req, res) => {
-  const healthy = db.isConfigured;
+  const healthy = db.isConfigured && isSupabaseAuthConfigured;
   res.status(healthy ? 200 : 503).json({
     status: healthy ? 'ok' : 'configuration-required',
     database: 'Supabase PostgreSQL',
     databaseConfigured: db.isConfigured,
+    authConfigured: isSupabaseAuthConfigured,
     webPushConfigured: vapid.isConfigured,
     runtime: process.env.VERCEL ? 'vercel' : 'node'
   });
@@ -388,9 +394,17 @@ app.get('/health', (req, res) => {
 
 // Supabase 환경 변수 제공
 app.get('/api/config', (req, res) => {
+  if (!isSupabaseAuthConfigured) {
+    return res.status(503).json({
+      success: false,
+      error: 'Supabase public configuration is missing or invalid. Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY.'
+    });
+  }
+
   res.json({
-    supabaseUrl: process.env.SUPABASE_URL || '',
-    supabaseAnonKey: process.env.SUPABASE_ANON_KEY || ''
+    success: true,
+    supabaseUrl: SUPABASE_URL,
+    supabasePublishableKey: SUPABASE_PUBLISHABLE_KEY
   });
 });
 

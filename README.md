@@ -78,8 +78,8 @@ npm install
 ```env
 PORT=3000
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_your-key
+SUPABASE_SECRET_KEY=sb_secret_your-key
 ADMIN_EMAILS=admin@example.com
 VAPID_PUBLIC_KEY=your-vapid-public-key
 VAPID_PRIVATE_KEY=your-vapid-private-key
@@ -93,6 +93,7 @@ npm start
 - 📅 **원형 시간표 대시보드**: `http://localhost:3000/`
 - 🔔 **푸시 서버 관리자 콘솔**: `http://localhost:3000/server-admin`
 - 📱 **PWA 설치 및 알림 구독**: `http://localhost:3000/`의 `푸시 알림 설정`
+- 🌐 **운영 배포**: `https://kimdongup-circular-schedule.vercel.app/`
 
 Vercel에 처음부터 배포하는 방법과 검증 절차는 [`deploy.md`](deploy.md)를 참고하세요.
 
