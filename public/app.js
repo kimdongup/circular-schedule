@@ -11,6 +11,9 @@ const LAYER_WIDTH = 28;
 const STORAGE_KEY = "CIRCULAR_SCHEDULE_ITEMS_V3";
 const TITLE_STORAGE_KEY = "CIRCULAR_SCHEDULE_TITLE_V3";
 const HUB_STORAGE_KEY = "CIRCULAR_SCHEDULE_HUB_V2";
+const PUSH_ENABLED_STORAGE_KEY = "CIRCULAR_SCHEDULE_PUSH_ENABLED_V1";
+const PUSH_APP_KEY_STORAGE_KEY = "CIRCULAR_SCHEDULE_PUSH_APP_KEY_V1";
+const AUTO_SAVE_DELAY_MS = 500;
 
 const DAYS = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"];
 const DAY_SHORT = ["월", "화", "수", "목", "금", "토", "일"];
@@ -98,6 +101,12 @@ let activeOpenDropdownId = null;
 let schedulesSyncPromise = null;
 let schedulesSyncTimer = null;
 let schedulesRealtimeChannel = null;
+let webPushClient = null;
+let pushRestorePromise = null;
+const dirtyScheduleIds = new Set();
+const scheduleAutoSaveTimers = new Map();
+const scheduleSaveChains = new Map();
+const scheduleAutoSaveRevisions = new Map();
 
 function sample(title, start, end, days, color) {
   return { id: `sample-${title}-${start}-${days.join("")}`, title, start, end, days, color };
@@ -379,11 +388,15 @@ async function loadSchedulesFromSupabase() {
           });
         });
 
-        // 로그인 중에는 Supabase를 기준 데이터로 사용합니다. 브라우저별 localStorage
-        // 항목을 다시 합치면 다른 브라우저에서 삭제한 시간표가 되살아납니다.
+        // 로그인 중에는 Supabase를 기준 데이터로 사용합니다. 단, 아직 자동 저장이
+        // 끝나지 않은 이 브라우저의 변경만 보존해 실시간 갱신이 입력을 덮지 않게 합니다.
         if (!currentUser) {
           allSchedules.forEach(local => {
             if (!remoteMap.has(local.id)) remoteMap.set(local.id, local);
+          });
+        } else {
+          allSchedules.forEach(local => {
+            if (dirtyScheduleIds.has(local.id)) remoteMap.set(local.id, local);
           });
         }
 
@@ -393,6 +406,14 @@ async function loadSchedulesFromSupabase() {
           if (editorWasOpen) {
             showDashboardView();
             showStatusMessage("🔄 다른 브라우저의 삭제 내용을 반영했습니다.");
+          }
+        } else if (editorWasOpen && previousScheduleId && !dirtyScheduleIds.has(previousScheduleId)) {
+          const refreshedSchedule = remoteMap.get(previousScheduleId);
+          if (refreshedSchedule) {
+            items = (refreshedSchedule.items || []).map((item, idx) => normalizeItem(item, idx));
+            $("schedule-title").value = refreshedSchedule.title || "나의 일주일 시간표";
+            renderList();
+            renderSchedule();
           }
         }
         saveHubSchedules();
@@ -449,7 +470,7 @@ async function saveScheduleToSupabase(schedule) {
       title: schedule.title,
       items: schedule.items,
       is_public: isPublic,
-      updated_at: new Date().toISOString()
+      updated_at: schedule.updatedAt || new Date().toISOString()
     }, { onConflict: "id" });
     if (error) throw error;
     return true;
@@ -457,6 +478,102 @@ async function saveScheduleToSupabase(schedule) {
     console.warn("[App] saveScheduleToSupabase error:", e.message);
     return false;
   }
+}
+
+function canAutoSaveSchedule(schedule) {
+  if (!schedule || !currentUser || !supabase) return false;
+  const isPublic = schedule.is_public === true || !schedule.user_id;
+  if (isPublic) return currentUserIsAdmin;
+  return schedule.user_id === currentUser.id;
+}
+
+function setAutoSaveStatus(message, tone = "muted") {
+  const status = $("autosave-status");
+  if (!status) return;
+  status.textContent = message;
+  status.style.color = tone === "success"
+    ? "var(--g-success)"
+    : (tone === "error" ? "var(--g-danger)" : "var(--g-text-muted)");
+}
+
+function scheduleSnapshot(schedule) {
+  return {
+    id: schedule.id,
+    user_id: schedule.user_id || null,
+    title: schedule.title,
+    items: JSON.parse(JSON.stringify(schedule.items || [])),
+    is_public: schedule.is_public !== undefined ? schedule.is_public : !schedule.user_id,
+    updatedAt: schedule.updatedAt || new Date().toISOString()
+  };
+}
+
+function queueScheduleAutoSave(schedule, { immediate = false } = {}) {
+  if (!canAutoSaveSchedule(schedule)) return Promise.resolve(false);
+
+  dirtyScheduleIds.add(schedule.id);
+  scheduleAutoSaveRevisions.set(schedule.id, (scheduleAutoSaveRevisions.get(schedule.id) || 0) + 1);
+  const pendingTimer = scheduleAutoSaveTimers.get(schedule.id);
+  if (pendingTimer) window.clearTimeout(pendingTimer);
+  scheduleAutoSaveTimers.delete(schedule.id);
+
+  if (schedule.id === currentScheduleId) setAutoSaveStatus("자동 저장 대기 중...");
+  if (immediate) return flushScheduleAutoSave(schedule.id);
+
+  const timer = window.setTimeout(() => {
+    scheduleAutoSaveTimers.delete(schedule.id);
+    flushScheduleAutoSave(schedule.id);
+  }, AUTO_SAVE_DELAY_MS);
+  scheduleAutoSaveTimers.set(schedule.id, timer);
+  return Promise.resolve(true);
+}
+
+function flushScheduleAutoSave(scheduleId) {
+  const pendingTimer = scheduleAutoSaveTimers.get(scheduleId);
+  if (pendingTimer) window.clearTimeout(pendingTimer);
+  scheduleAutoSaveTimers.delete(scheduleId);
+
+  const previousSave = scheduleSaveChains.get(scheduleId) || Promise.resolve(true);
+  const nextSave = previousSave.catch(() => false).then(async () => {
+    const latest = allSchedules.find(schedule => schedule.id === scheduleId);
+    if (!latest) {
+      dirtyScheduleIds.delete(scheduleId);
+      scheduleAutoSaveRevisions.delete(scheduleId);
+      return true;
+    }
+    if (!dirtyScheduleIds.has(scheduleId)) return true;
+    if (!canAutoSaveSchedule(latest)) return false;
+
+    const revision = scheduleAutoSaveRevisions.get(scheduleId) || 0;
+    const snapshot = scheduleSnapshot(latest);
+    if (scheduleId === currentScheduleId) setAutoSaveStatus("클라우드에 저장 중...");
+    const saved = await saveScheduleToSupabase(snapshot);
+    const current = allSchedules.find(schedule => schedule.id === scheduleId);
+
+    if (saved && current && scheduleAutoSaveRevisions.get(scheduleId) === revision) {
+      dirtyScheduleIds.delete(scheduleId);
+    }
+
+    if (scheduleId === currentScheduleId) {
+      setAutoSaveStatus(saved ? "클라우드 자동 저장됨" : "자동 저장 실패", saved ? "success" : "error");
+    }
+    return saved;
+  });
+
+  scheduleSaveChains.set(scheduleId, nextSave);
+  nextSave.then((saved) => {
+    if (saved && dirtyScheduleIds.has(scheduleId) && !scheduleAutoSaveTimers.has(scheduleId)) {
+      const retryTimer = window.setTimeout(() => {
+        scheduleAutoSaveTimers.delete(scheduleId);
+        flushScheduleAutoSave(scheduleId);
+      }, AUTO_SAVE_DELAY_MS);
+      scheduleAutoSaveTimers.set(scheduleId, retryTimer);
+    }
+  });
+  return nextSave;
+}
+
+function flushAllScheduleAutoSaves() {
+  return Promise.all(Array.from(dirtyScheduleIds, scheduleId => flushScheduleAutoSave(scheduleId)));
 }
 
 // ==========================================
@@ -608,6 +725,7 @@ window.openScheduleEditor = function(id) {
   currentScheduleId = schedule.id;
   items = (schedule.items || []).map((item, idx) => normalizeItem(item, idx));
   $("schedule-title").value = schedule.title || "나의 일주일 시간표";
+  setAutoSaveStatus(canAutoSaveSchedule(schedule) ? "클라우드 자동 저장 켜짐" : (currentUser ? "읽기 전용" : "로컬 저장"));
   
   showEditorView();
   renderList();
@@ -664,7 +782,7 @@ window.duplicateSchedule = function(id) {
 
   allSchedules.unshift(newSchedule);
   saveHubSchedules();
-  saveScheduleToSupabase(newSchedule);
+  queueScheduleAutoSave(newSchedule, { immediate: true });
   renderDashboard();
   showStatusMessage(`📋 '${newSchedule.title}' 시간표가 복제되었습니다.`);
 };
@@ -683,6 +801,13 @@ window.deleteSchedule = async function(id) {
   }
 
   if (!confirm(`'${schedule.title}' 시간표를 삭제하시겠습니까?`)) return;
+
+  const pendingSave = scheduleAutoSaveTimers.get(id);
+  if (pendingSave) window.clearTimeout(pendingSave);
+  scheduleAutoSaveTimers.delete(id);
+  dirtyScheduleIds.delete(id);
+  scheduleAutoSaveRevisions.delete(id);
+  await (scheduleSaveChains.get(id) || Promise.resolve()).catch(() => false);
 
   try {
     if (isPublic) {
@@ -725,6 +850,7 @@ window.deleteSchedule = async function(id) {
   }
 
   allSchedules = allSchedules.filter(s => s.id !== id);
+  scheduleSaveChains.delete(id);
   if (currentScheduleId === id) {
     currentScheduleId = allSchedules.length > 0 ? allSchedules[0].id : null;
   }
@@ -744,7 +870,7 @@ window.renameSchedule = function(id) {
     schedule.title = newTitle.trim();
     schedule.updatedAt = new Date().toISOString();
     saveHubSchedules();
-    saveScheduleToSupabase(schedule);
+    queueScheduleAutoSave(schedule, { immediate: true });
     renderDashboard();
     showStatusMessage(`✏️ 시간표 제목이 '${schedule.title}'(으)로 변경되었습니다.`);
   }
@@ -766,7 +892,7 @@ function createNewSchedule() {
 
   allSchedules.unshift(newSchedule);
   saveHubSchedules();
-  saveScheduleToSupabase(newSchedule);
+  queueScheduleAutoSave(newSchedule, { immediate: true });
   openScheduleEditor(newId);
   showStatusMessage(`➕ '${newTitle}' (${isPrivate ? '비공개' : '공개'}) 생성이 완료되었습니다.`);
 }
@@ -794,7 +920,7 @@ function syncCurrentScheduleToHub({ persistRemote = true } = {}) {
     current.items = items;
     current.updatedAt = new Date().toISOString();
     saveHubSchedules();
-    if (persistRemote) saveScheduleToSupabase(current);
+    if (persistRemote) queueScheduleAutoSave(current);
   }
   return current || null;
 }
@@ -1321,6 +1447,14 @@ function setupEvents() {
 
   $("schedule-title").addEventListener("input", saveLocal);
 
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushAllScheduleAutoSaves();
+  });
+  window.addEventListener("pagehide", flushAllScheduleAutoSaves);
+  window.addEventListener("online", () => {
+    dirtyScheduleIds.forEach(scheduleId => flushScheduleAutoSave(scheduleId));
+  });
+
   // PNG Download
   function downloadSvgAsPng() {
     const svgEl = $("schedule-svg");
@@ -1376,7 +1510,7 @@ function setupEvents() {
 
       btnCloudSave.disabled = true;
       btnCloudSave.textContent = "저장 중...";
-      const saved = await saveScheduleToSupabase(current);
+      const saved = await queueScheduleAutoSave(current, { immediate: true });
       btnCloudSave.disabled = false;
       btnCloudSave.textContent = "저장";
 
@@ -1449,7 +1583,7 @@ function setupEvents() {
   window.handleAvatarClick = function() {
     if (currentUser) {
       if (confirm(`'${currentUser.email}' 계정에서 로그아웃하시겠습니까?`)) {
-        if (supabase) supabase.auth.signOut();
+        window.doLogout();
       }
     } else {
       window.openAuthModal();
@@ -1457,6 +1591,8 @@ function setupEvents() {
   };
 
   window.doLogout = async function() {
+    await disablePushBeforeLogout();
+    await flushAllScheduleAutoSaves();
     if (supabase) await supabase.auth.signOut();
     currentAuthSession = null;
     await handleAuthChange(null, null);
@@ -1520,7 +1656,6 @@ function setupEvents() {
   });
 
   // Push Subscribe / Test Push
-  let webPushClient = null;
   if (typeof WebPushClient !== "undefined") {
     webPushClient = new WebPushClient({
       serverUrl: window.location.origin,
@@ -1595,9 +1730,12 @@ function setupEvents() {
       const status = await webPushClient.getSubscriptionStatus();
       if (status.subscribed && status.serverRegistered) {
         await webPushClient.unsubscribe();
+        localStorage.setItem(PUSH_ENABLED_STORAGE_KEY, "false");
         alert("푸시 알림 구독이 해제되었습니다.");
       } else {
         await webPushClient.subscribe();
+        localStorage.setItem(PUSH_ENABLED_STORAGE_KEY, "true");
+        localStorage.setItem(PUSH_APP_KEY_STORAGE_KEY, selectedKey);
         alert(`🔔 [${selectedKey}] 앱 키로 웹 푸시 알림 구독이 완료되었습니다!`);
       }
     } catch (err) {
@@ -1622,9 +1760,20 @@ function setupEvents() {
       }
     });
   }
+
+  const selectPushApp = $("push-select-app");
+  if (selectPushApp) {
+    selectPushApp.addEventListener("change", async () => {
+      if (selectPushApp.value) {
+        localStorage.setItem(PUSH_APP_KEY_STORAGE_KEY, selectPushApp.value);
+        if (webPushClient) webPushClient.appKey = selectPushApp.value;
+      }
+      await updatePushStatusUI();
+    });
+  }
 }
 
-async function loadAvailableApps() {
+async function loadAvailableApps({ silent = false } = {}) {
   const selectApp = $("push-select-app");
   if (!selectApp) return false;
 
@@ -1638,6 +1787,7 @@ async function loadAvailableApps() {
       throw new Error('등록된 Web Push 앱이 없습니다. 관리자 화면에서 앱을 먼저 생성해 주세요.');
     }
 
+    const preferredAppKey = localStorage.getItem(PUSH_APP_KEY_STORAGE_KEY) || "";
     selectApp.innerHTML = "";
     data.apps.forEach(app => {
       const opt = document.createElement("option");
@@ -1645,11 +1795,80 @@ async function loadAvailableApps() {
       opt.textContent = `${app.app_name} (${app.app_key})`;
       selectApp.appendChild(opt);
     });
+    if (preferredAppKey && data.apps.some(app => app.app_key === preferredAppKey)) {
+      selectApp.value = preferredAppKey;
+    }
+    if (selectApp.value) {
+      localStorage.setItem(PUSH_APP_KEY_STORAGE_KEY, selectApp.value);
+      if (webPushClient) webPushClient.appKey = selectApp.value;
+    }
     return true;
   } catch (error) {
     selectApp.innerHTML = '<option value="" selected disabled>앱 목록을 불러오지 못했습니다.</option>';
-    alert(error.message);
+    if (!silent) alert(error.message);
+    else console.warn("[Web Push] App list restore failed:", error.message);
     return false;
+  }
+}
+
+async function restorePushSubscriptionAfterLogin() {
+  if (!currentUser || !currentAuthSession || !webPushClient || !webPushClient.isSupported()) return false;
+  if (pushRestorePromise) return pushRestorePromise;
+
+  pushRestorePromise = (async () => {
+    try {
+      const registration = await webPushClient.registerServiceWorker();
+      const appsLoaded = await loadAvailableApps({ silent: true });
+      if (!appsLoaded || !webPushClient.appKey) return false;
+
+      const existingSubscription = await registration.pushManager.getSubscription();
+      if (existingSubscription) {
+        if (localStorage.getItem(PUSH_ENABLED_STORAGE_KEY) === "false") {
+          await existingSubscription.unsubscribe();
+          return false;
+        }
+        await webPushClient.registerExistingSubscription();
+        localStorage.setItem(PUSH_ENABLED_STORAGE_KEY, "true");
+        return true;
+      }
+
+      const pushWasEnabled = localStorage.getItem(PUSH_ENABLED_STORAGE_KEY) === "true";
+      if (pushWasEnabled && Notification.permission === "granted") {
+        await webPushClient.subscribe();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.warn("[Web Push] Signed-in subscription restore failed:", error.message);
+      return false;
+    } finally {
+      pushRestorePromise = null;
+    }
+  })();
+
+  return pushRestorePromise;
+}
+
+async function removeBrowserPushSubscription() {
+  if (!("serviceWorker" in navigator)) return false;
+  try {
+    const registration = await navigator.serviceWorker.getRegistration("/");
+    const subscription = registration ? await registration.pushManager.getSubscription() : null;
+    return subscription ? subscription.unsubscribe() : false;
+  } catch (error) {
+    console.warn("[Web Push] Browser subscription cleanup failed:", error.message);
+    return false;
+  }
+}
+
+async function disablePushBeforeLogout() {
+  try {
+    if (webPushClient && currentAuthSession) await webPushClient.unsubscribe();
+  } catch (error) {
+    console.warn("[Web Push] Server subscription cleanup failed during logout:", error.message);
+    await removeBrowserPushSubscription();
+  } finally {
+    localStorage.setItem(PUSH_ENABLED_STORAGE_KEY, "false");
   }
 }
 
@@ -1694,7 +1913,7 @@ async function handleAuthChange(user, session = currentAuthSession) {
   const pushNav = $("nav-push");
 
   if (user) {
-    if (userDisplay) userDisplay.textContent = `${user.email} (로그인 완료)`;
+    if (userDisplay) userDisplay.textContent = `${user.email} (자동 저장)`;
     if (loginBtn) loginBtn.style.display = "none";
     if (logoutBtn) logoutBtn.style.display = "inline-block";
     if (cloudSaveBtn) cloudSaveBtn.style.display = "inline-block";
@@ -1708,6 +1927,12 @@ async function handleAuthChange(user, session = currentAuthSession) {
     }
     await checkAdminRole(session);
   } else {
+    scheduleAutoSaveTimers.forEach(timer => window.clearTimeout(timer));
+    scheduleAutoSaveTimers.clear();
+    dirtyScheduleIds.clear();
+    scheduleAutoSaveRevisions.clear();
+    await removeBrowserPushSubscription();
+    localStorage.setItem(PUSH_ENABLED_STORAGE_KEY, "false");
     currentUserIsAdmin = false;
     if (userDisplay) userDisplay.textContent = "게스트 모드 (공개 저장)";
     if (loginBtn) loginBtn.style.display = "inline-block";
@@ -1725,6 +1950,7 @@ async function handleAuthChange(user, session = currentAuthSession) {
     }
     const adminBtn = $("btn-admin-panel-link");
     if (adminBtn) adminBtn.style.display = "none";
+    setAutoSaveStatus("로컬 저장");
 
     // Purge private schedules from local memory on logout
     allSchedules = allSchedules.filter(s => s.is_public === true || !s.user_id);
@@ -1740,6 +1966,11 @@ async function handleAuthChange(user, session = currentAuthSession) {
   }
 
   await loadSchedulesFromSupabase();
+  if (user) {
+    const activeSchedule = allSchedules.find(schedule => schedule.id === currentScheduleId);
+    setAutoSaveStatus(canAutoSaveSchedule(activeSchedule) ? "클라우드 자동 저장 켜짐" : "읽기 전용");
+    await restorePushSubscriptionAfterLogin();
+  }
   renderDashboard();
 }
 

@@ -132,13 +132,18 @@
     <section id="view-editor" style="display: none;">
       <div class="editor-container">
         
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px;">
           <button type="button" id="btn-back-to-dashboard" class="btn btn-sm btn-outline">
             &larr; 시간표 보관함 목록으로 돌아가기
           </button>
-          <span id="user-display" style="font-size:0.85rem; font-weight:600; color:var(--g-text-muted);">
-            게스트 모드 (로컬 저장 중)
-          </span>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
+            <span id="user-display" style="font-size:0.85rem; font-weight:600; color:var(--g-text-muted);">
+              게스트 모드 (로컬 저장 중)
+            </span>
+            <span id="autosave-status" role="status" aria-live="polite" style="font-size:0.75rem; font-weight:600; color:var(--g-text-muted);">
+              로컬 저장
+            </span>
+          </div>
         </div>
 
         <div class="card viewer-card">
