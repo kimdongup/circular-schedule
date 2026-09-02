@@ -1213,8 +1213,29 @@ function setupEvents() {
   });
 
   $("btn-render").addEventListener("click", () => {
+    const current = allSchedules.find(schedule => schedule.id === currentScheduleId);
+    if (!current) return alert("현재 시간표를 찾을 수 없습니다.");
+
+    const isPublic = current.is_public === true || !current.user_id;
+    if (isPublic && !currentUserIsAdmin) {
+      return alert("공개 시간표는 관리자만 비울 수 있습니다.");
+    }
+    if (!isPublic && (!currentUser || current.user_id !== currentUser.id)) {
+      return alert("본인의 비공개 시간표만 비울 수 있습니다.");
+    }
+
+    if (!confirm("현재 시간표의 모든 활동을 비울까요? 시간표 자체는 삭제되지 않습니다.")) return;
+    items = [];
+    selectedItemId = null;
+    editingId = null;
+    $("detail-card").style.display = "none";
+    $("input-title").value = "";
+    $("btn-submit-activity").textContent = "➕ 활동 등록하기";
+    $("btn-cancel-edit").style.display = "none";
+    saveLocal();
     renderSchedule();
     renderList();
+    showStatusMessage("🧹 시간표의 모든 활동을 비웠습니다.");
   });
 
   $("btn-load-sample").addEventListener("click", () => {
