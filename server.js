@@ -1,16 +1,16 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const crypto = require('crypto');
 const { customAlphabet } = require('nanoid');
 require('dotenv').config();
 
 const db = require('./src/db');
 const vapid = require('./src/vapid');
 const { sendNotificationToSubscriptions } = require('./src/pushService');
-const syncService = require('./src/db/syncService');
 
 const app = express();
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0';
 
 const nanoid = customAlphabet('1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', 6);
@@ -22,18 +22,12 @@ app.use(express.json());
 // ==========================================
 // 정적 파일 서빙 (Static File Serving)
 // ==========================================
-// 1. Pushwing 클라이언트 PWA (/client)
-app.use('/client', express.static(path.join(__dirname, 'client')));
-
-// 2. Pushwing 서버 관리자 콘솔 (/admin)
-app.use('/admin', express.static(path.join(__dirname, 'admin')));
-
-// 3. 원형 시간표 웹 앱 (/ 및 /public)
+// Vercel은 public/**를 CDN에서 직접 제공하며, 이 미들웨어는 로컬 개발에서 사용됩니다.
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Pushwing 관리자 콘솔 페이지
+// Web Push 관리자 콘솔 페이지
 app.get('/server-admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'admin', 'index.html'));
+  res.redirect(302, '/admin/');
 });
 
 // ==========================================
@@ -49,10 +43,9 @@ async function verifyAdminUser(req) {
     return { isAdmin: false, error: '로그인 토큰이 제공되지 않았습니다.' };
   }
 
-  if (process.env.SUPABASE_URL && (process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)) {
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
     try {
-      const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
-      const supabaseAuth = createClient(process.env.SUPABASE_URL, key, {
+      const supabaseAuth = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
         auth: { autoRefreshToken: false, persistSession: false }
       });
       const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
@@ -67,7 +60,7 @@ async function verifyAdminUser(req) {
     }
   }
 
-  return { isAdmin: true, user: { email: 'local-admin' } };
+  return { isAdmin: false, error: 'Supabase authentication is not configured.' };
 }
 
 async function requireAdminAuth(req, res, next) {
@@ -120,11 +113,18 @@ app.post('/api/v1/admin/grant-role', requireAdminAuth, async (req, res) => {
 });
 
 // ==========================================
-// 🔔 Pushwing Web Push (PWA) REST API v1
+// 🔔 표준 Web Push (PWA) REST API v1
 // ==========================================
 
 // 1. VAPID 공개키 조회 (공개)
 app.get('/api/v1/vapid-key', (req, res) => {
+  if (!vapid.isConfigured) {
+    return res.status(503).json({
+      success: false,
+      error: 'Web Push is not configured.'
+    });
+  }
+
   res.json({
     success: true,
     vapidPublicKey: vapid.publicKey
@@ -141,7 +141,8 @@ app.get('/api/v1/admin/stats', requireAdminAuth, async (req, res) => {
         ...stats,
         vapidPublicKey: vapid.publicKey,
         vapidSubject: vapid.subject,
-        uptimeSeconds: Math.floor(process.uptime())
+        vapidConfigured: vapid.isConfigured,
+        runtime: process.env.VERCEL ? 'Vercel Function' : 'Node.js'
       }
     });
   } catch (err) {
@@ -169,16 +170,6 @@ app.get('/api/v1/admin/db-health', requireAdminAuth, async (req, res) => {
   }
 });
 
-// 2-2. SQLite ↔ Supabase 동기화 트리거 API (관리자 전용)
-app.post('/api/v1/admin/sync', requireAdminAuth, async (req, res) => {
-  try {
-    const syncResult = await syncService.syncAll();
-    res.json({ success: true, syncResult });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
 // 3. 앱(테넌트) 목록 조회
 app.get('/api/v1/apps', async (req, res) => {
   try {
@@ -198,7 +189,7 @@ app.post('/api/v1/apps', requireAdminAuth, async (req, res) => {
     }
     const cleanKey = (app_key || app_name).trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '');
     const finalAppKey = cleanKey || `app-${Date.now()}`;
-    const finalSecretKey = secret_key || `sec-${Math.random().toString(36).substring(2, 10)}`;
+    const finalSecretKey = secret_key || `sec-${crypto.randomBytes(24).toString('base64url')}`;
 
     const newApp = await db.createApp(finalAppKey, app_name, finalSecretKey);
     res.json({ success: true, app: newApp });
@@ -272,7 +263,7 @@ app.post('/api/v1/unsubscribe', async (req, res) => {
 });
 
 // 8. 푸시 알림 발송 (Push Dispatcher)
-app.post('/api/v1/push', async (req, res) => {
+app.post('/api/v1/push', requireAdminAuth, async (req, res) => {
   try {
     const { app_key, secret_key, user_id, title, body, url, icon, badge, extraData } = req.body;
 
@@ -288,7 +279,7 @@ app.post('/api/v1/push', async (req, res) => {
       return res.status(404).json({ success: false, error: `App key '${app_key}' not found` });
     }
 
-    // If secret_key not provided, verify admin session
+    // requireAdminAuth에서 관리자 세션 또는 앱 Secret Key를 이미 검증했습니다.
     if (secret_key && app.secret_key !== secret_key) {
       return res.status(401).json({ success: false, error: 'Invalid secret_key for this app' });
     }
@@ -306,8 +297,8 @@ app.post('/api/v1/push', async (req, res) => {
       title,
       body,
       url: url || '/',
-      icon: icon || '/favicon.ico',
-      badge: badge || '/favicon.ico',
+      icon: icon || '/icons/notification-icon.png',
+      badge: badge || '/icons/notification-badge.png',
       extraData
     });
 
@@ -385,7 +376,14 @@ app.get('/api/v1/admin/users', requireAdminAuth, async (req, res) => {
 
 // 헬스 체크
 app.get('/health', (req, res) => {
-  res.status(200).send('OK');
+  const healthy = db.isConfigured;
+  res.status(healthy ? 200 : 503).json({
+    status: healthy ? 'ok' : 'configuration-required',
+    database: 'Supabase PostgreSQL',
+    databaseConfigured: db.isConfigured,
+    webPushConfigured: vapid.isConfigured,
+    runtime: process.env.VERCEL ? 'vercel' : 'node'
+  });
 });
 
 // Supabase 환경 변수 제공
@@ -408,23 +406,18 @@ app.get('/s/:id', (req, res) => {
 
 // SPA Fallback
 app.get('*', (req, res) => {
-  if (req.path.startsWith('/api/') || req.path.startsWith('/client/') || req.path.startsWith('/admin/')) {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/admin/')) {
     return res.status(404).json({ error: 'Not found' });
   }
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// ==========================================
-// 서버 시작
-// ==========================================
-app.listen(PORT, HOST, () => {
-  console.log('====================================================');
-  console.log(`🚀 Combined Render Service running on http://${HOST}:${PORT}`);
-  console.log(`📅 Circular Schedule: http://${HOST}:${PORT}`);
-  console.log(`🔔 Pushwing Server Admin: http://${HOST}:${PORT}/server-admin`);
-  console.log(`📱 Pushwing PWA Client: http://${HOST}:${PORT}/client/index.html`);
-  console.log(`🔑 VAPID Public Key: ${vapid.publicKey}`);
-  console.log('====================================================');
-  // Start daily database synchronization (every 24 hours)
-  syncService.startScheduledSync(24 * 60 * 60 * 1000);
-});
+// Vercel은 내보낸 Express 앱을 하나의 Function으로 실행합니다.
+// 로컬에서 `npm start`로 실행할 때만 포트 리스너를 생성합니다.
+if (require.main === module) {
+  app.listen(PORT, HOST, () => {
+    console.log(`Circular Schedule running at http://${HOST}:${PORT}`);
+  });
+}
+
+module.exports = app;

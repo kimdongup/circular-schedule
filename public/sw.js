@@ -1,110 +1,82 @@
-/* ====================================================================
- * Pushwing Web Push Service Worker (client/sw.js)
- * --------------------------------------------------------------------
- * CRITICAL INVARIANT:
- * Pure Web Service Worker API only.
- * ABSOLUTELY NO DOM (window, document) references allowed in this file.
- * Handles background push event receiving and notification clicks.
- * ==================================================================== */
+/**
+ * Circular Schedule PWA Service Worker.
+ * Push messages are displayed only through the operating system's
+ * notification UI. They are not mirrored into an open browser tab.
+ */
 
-// Service Worker Install
-self.addEventListener('install', (event) => {
-  console.log('[Pushwing SW] Service Worker installing...');
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
-// Service Worker Activate
 self.addEventListener('activate', (event) => {
-  console.log('[Pushwing SW] Service Worker activated.');
   event.waitUntil(self.clients.claim());
 });
 
-const DEFAULT_ICON = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%233b82f6'/><text x='50' y='65' font-size='45' text-anchor='middle' fill='white'>⏰</text></svg>";
-
-// 1. Push Event Listener (Background Notification Arrival)
 self.addEventListener('push', (event) => {
-  console.log('[Pushwing SW] Push event received.');
-
-  let data = {
-    title: '⏰ 시간표 푸시 알림',
-    body: '새로운 알림이 도착했습니다.',
-    icon: DEFAULT_ICON,
-    badge: DEFAULT_ICON,
-    url: '/'
+  const notification = {
+    title: '⏰ 시간표 알림',
+    body: '새로운 일정 알림이 도착했습니다.',
+    icon: '/icons/notification-icon.png',
+    badge: '/icons/notification-badge.png',
+    url: '/',
+    tag: 'circular-schedule-alert',
+    extraData: {}
   };
 
   if (event.data) {
     try {
       const payload = event.data.json();
-      data.title = payload.title || data.title;
-      data.body = payload.body || data.body;
-      data.icon = payload.icon || DEFAULT_ICON;
-      data.badge = payload.badge || DEFAULT_ICON;
-      data.url = payload.url || '/';
-      data.extraData = payload.extraData || {};
-    } catch (e) {
-      data.body = event.data.text();
+      notification.title = payload.title || notification.title;
+      notification.body = payload.body || notification.body;
+      notification.icon = payload.icon || notification.icon;
+      notification.badge = payload.badge || notification.badge;
+      notification.url = payload.url || notification.url;
+      notification.tag = payload.tag || notification.tag;
+      notification.extraData = payload.extraData || {};
+    } catch (_error) {
+      notification.body = event.data.text();
     }
   }
 
-  const notificationOptions = {
-    body: data.body,
-    icon: data.icon,
-    badge: data.badge,
-    vibrate: [200, 100, 200],
-    requireInteraction: true,
-    tag: 'pushwing-alert-' + Date.now(),
-    renotify: true,
-    data: {
-      url: data.url,
-      extraData: data.extraData
-    },
-    actions: [
-      { action: 'open', title: '열기 🚀' },
-      { action: 'close', title: '닫기 ✕' }
-    ]
-  };
-
-  const showPromise = self.registration.showNotification(data.title, notificationOptions);
-
-  // Broadcast to all open tabs for in-app instant banner
-  const broadcastPromise = self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-    clients.forEach((client) => {
-      client.postMessage({
-        type: 'PUSH_NOTIFICATION_RECEIVED',
-        title: data.title,
-        body: data.body,
-        url: data.url
-      });
-    });
-  });
-
-  event.waitUntil(Promise.all([showPromise, broadcastPromise]));
+  event.waitUntil(
+    self.registration.showNotification(notification.title, {
+      body: notification.body,
+      icon: notification.icon,
+      badge: notification.badge,
+      vibrate: [200, 100, 200],
+      tag: notification.tag,
+      renotify: true,
+      requireInteraction: true,
+      data: {
+        url: notification.url,
+        extraData: notification.extraData
+      },
+      actions: [
+        { action: 'open', title: '열기' },
+        { action: 'close', title: '닫기' }
+      ]
+    })
+  );
 });
 
-// 2. Notification Click Listener
 self.addEventListener('notificationclick', (event) => {
-  console.log('[Pushwing SW] Notification clicked:', event.notification.title);
   event.notification.close();
+  if (event.action === 'close') return;
 
-  if (event.action === 'close') {
-    return;
-  }
-
-  const targetUrl = (event.notification.data && event.notification.data.url) ? event.notification.data.url : '/client/index.html';
+  const relativeUrl = event.notification.data && event.notification.data.url
+    ? event.notification.data.url
+    : '/';
+  const targetUrl = new URL(relativeUrl, self.location.origin).href;
 
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // If a tab with target URL is already open, focus it
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (windowClients) => {
       for (const client of windowClients) {
-        if (client.url.includes(targetUrl) && 'focus' in client) {
+        if (client.url === targetUrl && 'focus' in client) {
           return client.focus();
         }
       }
-      // Otherwise open a new window/tab
-      if (self.clients.openWindow) {
-        return self.clients.openWindow(targetUrl);
-      }
+
+      return self.clients.openWindow ? self.clients.openWindow(targetUrl) : undefined;
     })
   );
 });

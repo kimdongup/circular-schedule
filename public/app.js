@@ -591,7 +591,7 @@ window.duplicateSchedule = function(id) {
   saveHubSchedules();
   saveScheduleToSupabase(newSchedule);
   renderDashboard();
-  showTopHeaderNotification(`📋 '${newSchedule.title}' 시간표가 복제되었습니다.`);
+  showStatusMessage(`📋 '${newSchedule.title}' 시간표가 복제되었습니다.`);
 };
 
 window.deleteSchedule = function(id) {
@@ -610,7 +610,7 @@ window.deleteSchedule = function(id) {
   }
 
   renderDashboard();
-  showTopHeaderNotification(`🗑️ '${schedule.title}' 시간표가 삭제되었습니다.`);
+  showStatusMessage(`🗑️ '${schedule.title}' 시간표가 삭제되었습니다.`);
 };
 
 window.renameSchedule = function(id) {
@@ -625,7 +625,7 @@ window.renameSchedule = function(id) {
     saveHubSchedules();
     saveScheduleToSupabase(schedule);
     renderDashboard();
-    showTopHeaderNotification(`✏️ 시간표 제목이 '${schedule.title}'(으)로 변경되었습니다.`);
+    showStatusMessage(`✏️ 시간표 제목이 '${schedule.title}'(으)로 변경되었습니다.`);
   }
 };
 
@@ -647,7 +647,7 @@ function createNewSchedule() {
   saveHubSchedules();
   saveScheduleToSupabase(newSchedule);
   openScheduleEditor(newId);
-  showTopHeaderNotification(`➕ '${newTitle}' (${isPrivate ? '비공개' : '공개'}) 생성이 완료되었습니다.`);
+  showStatusMessage(`➕ '${newTitle}' (${isPrivate ? '비공개' : '공개'}) 생성이 완료되었습니다.`);
 }
 
 // Navigation View Switchers
@@ -682,13 +682,13 @@ function syncCurrentScheduleToHub() {
 }
 
 // ==========================================
-// Floating Notification Window Card Popup
+// 화면 내 작업 완료 상태 메시지 (Web Push 수신에는 사용하지 않음)
 // ==========================================
-let headerPushTimeout = null;
-function showTopHeaderNotification(titleMessage, bodyText = "") {
-  const windowCard = $("floating-push-window");
-  const titleEl = $("header-push-title");
-  const textEl = $("header-push-text");
+let statusMessageTimeout = null;
+function showStatusMessage(titleMessage, bodyText = "") {
+  const windowCard = $("floating-status-window");
+  const titleEl = $("header-status-title");
+  const textEl = $("header-status-text");
   if (!windowCard) return;
 
   if (titleEl) titleEl.textContent = titleMessage;
@@ -696,16 +696,16 @@ function showTopHeaderNotification(titleMessage, bodyText = "") {
 
   windowCard.style.display = "flex";
 
-  if (headerPushTimeout) clearTimeout(headerPushTimeout);
-  headerPushTimeout = setTimeout(() => {
+  if (statusMessageTimeout) clearTimeout(statusMessageTimeout);
+  statusMessageTimeout = setTimeout(() => {
     windowCard.style.display = "none";
   }, 8000);
 }
 
-const btnCloseHeaderPush = $("btn-close-header-push");
-if (btnCloseHeaderPush) {
-  btnCloseHeaderPush.addEventListener("click", () => {
-    const windowCard = $("floating-push-window");
+const btnCloseStatusMessage = $("btn-close-header-status");
+if (btnCloseStatusMessage) {
+  btnCloseStatusMessage.addEventListener("click", () => {
+    const windowCard = $("floating-status-window");
     if (windowCard) windowCard.style.display = "none";
   });
 }
@@ -998,7 +998,7 @@ function setupEvents() {
     renderList();
     renderSchedule();
     showEditorView();
-    showTopHeaderNotification("📋 원본 샘플 시간표가 로드되었습니다.");
+    showStatusMessage("📋 원본 샘플 시간표가 로드되었습니다.");
   });
 
   // Filter chips (All, Private, Public, Name, Items, Recent)
@@ -1136,7 +1136,7 @@ function setupEvents() {
       downloadLink.click();
       document.body.removeChild(downloadLink);
       URL.revokeObjectURL(blobURL);
-      showTopHeaderNotification(`💾 '${title}.png' 이미지가 저장되었습니다.`);
+      showStatusMessage(`💾 '${title}.png' 이미지가 저장되었습니다.`);
     };
     image.src = blobURL;
   }
@@ -1151,7 +1151,7 @@ function setupEvents() {
   if (btnCloudSave) {
     btnCloudSave.addEventListener("click", async () => {
       syncCurrentScheduleToHub();
-      showTopHeaderNotification("☁️ 클라우드 저장이 완료되었습니다.");
+      showStatusMessage("☁️ 클라우드 저장이 완료되었습니다.");
     });
   }
 
@@ -1242,7 +1242,7 @@ function setupEvents() {
     if (error) alert("로그인 실패: " + error.message);
     else {
       window.closeAuthModal();
-      showTopHeaderNotification(`🎉 '${email}' 계정으로 로그인되었습니다.`);
+      showStatusMessage(`🎉 '${email}' 계정으로 로그인되었습니다.`);
       await loadSchedulesFromSupabase();
     }
   };
@@ -1281,18 +1281,21 @@ function setupEvents() {
   });
 
   // Push Subscribe / Test Push
-  let pushwingClient = null;
-  if (typeof PushwingClient !== "undefined") {
-    pushwingClient = new PushwingClient({
+  let webPushClient = null;
+  if (typeof WebPushClient !== "undefined") {
+    webPushClient = new WebPushClient({
       serverUrl: window.location.origin,
       appKey: "demo-app-key-2026"
+    });
+    webPushClient.registerServiceWorker().catch((error) => {
+      console.info("[Web Push] Service Worker registration skipped:", error.message);
     });
   }
 
   async function updatePushStatusUI() {
-    if (!pushwingClient) return;
+    if (!webPushClient) return;
     try {
-      const status = await pushwingClient.getSubscriptionStatus();
+      const status = await webPushClient.getSubscriptionStatus();
       const sup = $("push-stat-supported");
       const perm = $("push-stat-permission");
       const sub = $("push-stat-subscribed");
@@ -1309,22 +1312,22 @@ function setupEvents() {
   }
 
   $("btn-toggle-push-sub").addEventListener("click", async () => {
-    if (!pushwingClient) return alert("Pushwing 클라이언트를 로드할 수 없습니다.");
+    if (!webPushClient) return alert("Web Push 클라이언트를 로드할 수 없습니다.");
     const selectedKey = $("push-select-app") ? $("push-select-app").value : "demo-app-key-2026";
-    pushwingClient.appKey = selectedKey;
+    webPushClient.appKey = selectedKey;
 
-    const status = await pushwingClient.getSubscriptionStatus();
+    const status = await webPushClient.getSubscriptionStatus();
     const btn = $("btn-toggle-push-sub");
     btn.disabled = true;
     btn.textContent = "처리 중...";
 
     try {
       if (status.subscribed) {
-        await pushwingClient.unsubscribe();
+        await webPushClient.unsubscribe();
         alert("푸시 알림 구독이 해제되었습니다.");
       } else {
         const userId = $("push-user-id").value.trim() || "user-my-schedule";
-        await pushwingClient.subscribe(userId);
+        await webPushClient.subscribe(userId);
         alert(`🔔 [${selectedKey}] 앱 키로 웹 푸시 알림 구독이 완료되었습니다!`);
       }
     } catch (err) {
@@ -1344,9 +1347,15 @@ function setupEvents() {
     btn.textContent = "발송 중...";
 
     try {
+      const { data: { session } } = supabase
+        ? await supabase.auth.getSession()
+        : { data: { session: null } };
       const res = await fetch("/api/v1/push", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(session ? { Authorization: `Bearer ${session.access_token}` } : {})
+        },
         body: JSON.stringify({
           app_key: selectedKey,
           user_id: userId || null,
@@ -1358,7 +1367,6 @@ function setupEvents() {
       const data = await res.json();
       if (data.success) {
         if (data.deliveredCount > 0) {
-          showTopHeaderNotification(`🔔 [푸시 발송 성공] ${title} 알림이 정상 전송되었습니다!`);
           alert(`✅ [서버 전송 성공] 총 ${data.deliveredCount}대의 기기로 푸시가 성공적으로 전송되었습니다!`);
         } else {
           alert(`[${selectedKey}] 키로 구독 중인 기기를 찾을 수 없습니다. 먼저 [🔔 웹 푸시 알림 받기]를 완료해 주세요.`);
@@ -1377,17 +1385,14 @@ function setupEvents() {
   const btnTestLocal = $("btn-test-local-notify");
   if (btnTestLocal) {
     btnTestLocal.addEventListener("click", async () => {
-      if (typeof Notification === "undefined") return alert("알림을 지원하지 않는 브라우저입니다.");
-      let perm = Notification.permission;
-      if (perm !== "granted") perm = await Notification.requestPermission();
-      if (perm === "granted") {
-        new Notification("⏰ [로컬 팝업 테스트] 정상 작동 중!", {
-          body: "이 팝업이 화면에 보이면 맥(Mac) OS와 브라우저 알림이 100% 정상 작동하는 상태입니다.",
+      if (!webPushClient) return alert("Web Push 클라이언트를 로드할 수 없습니다.");
+      try {
+        await webPushClient.showSystemNotification("⏰ 시스템 알림 테스트", {
+          body: "이 알림이 기기의 알림 센터에 표시되면 Web Push 수신 환경이 정상입니다.",
           requireInteraction: true
         });
-        showTopHeaderNotification("🧪 [로컬 팝업 테스트] 알림 실행 완료!");
-      } else {
-        alert("알림 권한이 거부되어 있습니다. 브라우저 설정에서 알림을 허용해 주세요.");
+      } catch (error) {
+        alert(error.message);
       }
     });
   }
@@ -1410,15 +1415,6 @@ async function loadAvailableApps() {
       });
     }
   } catch (e) {}
-}
-
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.addEventListener("message", (event) => {
-    if (event.data && event.data.type === "PUSH_NOTIFICATION_RECEIVED") {
-      const msg = `🔔 [푸시 알림] ${event.data.title || ''}: ${event.data.body || ''}`;
-      showTopHeaderNotification(msg);
-    }
-  });
 }
 
 // Supabase Init
@@ -1491,16 +1487,22 @@ async function handleAuthChange(user) {
 }
 
 async function checkAdminRole(userId, email) {
-  if (email && email.toLowerCase() === "kimdongup@gmail.com") {
-    const adminBtn = $("btn-admin-panel-link");
-    if (adminBtn) adminBtn.style.display = "inline-flex";
-    return;
-  }
+  const adminBtn = $("btn-admin-panel-link");
   try {
-    const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId).maybeSingle();
-    const adminBtn = $("btn-admin-panel-link");
-    if (adminBtn) adminBtn.style.display = (data && data.role === "admin") ? "inline-flex" : "none";
-  } catch (e) {}
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      if (adminBtn) adminBtn.style.display = "none";
+      return;
+    }
+
+    const response = await fetch("/api/v1/auth/check-admin", {
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    });
+    const data = await response.json();
+    if (adminBtn) adminBtn.style.display = data.success && data.isAdmin ? "inline-flex" : "none";
+  } catch (e) {
+    if (adminBtn) adminBtn.style.display = "none";
+  }
 }
 
 async function init() {

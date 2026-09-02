@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pushwing Server Management Console (서버 관리 화면)</title>
+  <meta name="theme-color" content="#090d16">
+  <title>Web Push 관리 콘솔 | 원형 시간표</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <style>
     :root {
       --bg: #090d16;
@@ -57,12 +59,12 @@
 <body>
 
   <header>
-    <h1>⚙️ Pushwing Server Admin <span class="badge">서버 관리 화면</span></h1>
+    <h1>⚙️ Web Push Admin <span class="badge">서버 관리 화면</span></h1>
     <div style="display: flex; gap: 8px; align-items: center;">
       <span id="admin-user-info" style="font-size: 0.85rem; color: var(--text-muted);">확인 중...</span>
       <button type="button" id="btn-admin-logout" class="btn btn-outline btn-sm" style="display: none;">로그아웃</button>
       <a href="/" class="btn btn-outline btn-sm">📅 시간표 앱</a>
-      <a href="/client/index.html" target="_blank" class="btn btn-outline btn-sm">📱 PWA 콘솔</a>
+      <a href="/" target="_blank" class="btn btn-outline btn-sm">📱 사용자 PWA</a>
     </div>
   </header>
 
@@ -109,20 +111,9 @@
         <div id="stat-sent" class="val" style="color: var(--warning);">0</div>
       </div>
       <div class="stat-card">
-        <div class="label">서버 Uptime 및 VAPID</div>
-        <div id="stat-uptime" class="val" style="font-size: 1.05rem; color: var(--text);">가동 중</div>
+        <div class="label">Web Push VAPID 상태</div>
+        <div id="stat-uptime" class="val" style="font-size: 1.05rem; color: var(--text);">확인 중...</div>
       </div>
-    </div>
-
-    <!-- DB Sync Control Bar -->
-    <div class="card" style="margin-bottom: 18px; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; background: #0f172a;">
-      <div>
-        <strong style="color: #60a5fa; font-size: 0.95rem;">🔄 Supabase ↔ SQLite 데이터베이스 동기화</strong>
-        <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 10px;" id="sync-status-text">매일 자동 동기화 활성 중 (24시간 주기)</span>
-      </div>
-      <button type="button" id="btn-trigger-sync" class="btn btn-outline btn-sm" style="border-color: var(--primary); color: #93c5fd;">
-        ⚡ 지금 즉시 DB 동기화 실행
-      </button>
     </div>
 
     <div class="grid-2">
@@ -164,7 +155,7 @@
         <div class="form-group">
           <label for="admin-target-app">Target App Key</label>
           <select id="admin-target-app">
-            <option value="demo-app-key-2026">Pushwing Demo App</option>
+            <option value="demo-app-key-2026">Circular Schedule</option>
           </select>
         </div>
 
@@ -175,7 +166,7 @@
 
         <div class="form-group">
           <label for="admin-push-title">Push Title</label>
-          <input type="text" id="admin-push-title" value="📢 [서버 시스템 공지] Pushwing 알림">
+          <input type="text" id="admin-push-title" value="📢 [서버 시스템 공지] 시간표 알림">
         </div>
 
         <div class="form-group">

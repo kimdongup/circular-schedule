@@ -1,6 +1,6 @@
-# 🗓️ 원형 하루 시간표 & Pushwing 웹 푸시 통합 허브 (Circular Schedule Hub)
+# 🗓️ 원형 하루 시간표 PWA (Circular Schedule Hub)
 
-> **Google Workspace Migrate 스타일의 모던 카드 대시보드와 극좌표(Polar) 기반 원형 시간표 시각화, 그리고 Pushwing 실시간 웹 푸시 알림 시스템이 통합된 올인원 웹 애플리케이션입니다.**
+> **Google Workspace Migrate 스타일의 카드 대시보드, 극좌표 기반 원형 시간표, 표준 Web Push 시스템 알림을 통합한 PWA입니다.**
 
 ---
 
@@ -11,7 +11,7 @@
 - **수평 점 세개(`⋯`) 옵션 드롭다운**: 시간표 **복제하기**, **이름 변경**, **삭제하기** 원클릭 지원.
 - **`+ New` (새 시간표) Material Floating Pill 버튼**: 클릭 즉시 새 시간표를 생성하고 편집기로 전환.
 - **필터 칩 바**: `전체 (All)`, `이름순 (Name)`, `활동 많은 순 (Items)`, `최근 수정순 (Started)` 실시간 정렬.
-- **상단 펄스 알림 바**: 웹 푸시 수신 시 상단 블루 헤더에 실시간 알림 티커 표시.
+- **작업 상태 메시지**: 저장, 복제, 삭제 같은 화면 내 작업의 완료 상태 표시.
 - **사이드바 메뉴 토글 (☰)**: 좌측 내비게이션 사이드바 슬라이드 접기/펼치기.
 
 ### 2. 🎨 원형 일주일 시간표 편집기 (Circular SVG Canvas)
@@ -19,15 +19,15 @@
 - **연속 요일 띠(Band) 렌더링**: 월~금 등 연속된 요일 활동을 하나의 두꺼운 원호 띠로 깔끔하게 렌더링.
 - **PNG 고화질 이미지 내보내기 & 공유 링크 발급**: 원클릭으로 완성된 시간표를 다운로드하거나 고유 링크(`/s/:id`)로 공유.
 
-### 3. 🔔 Pushwing 웹 푸시 알림 & 관리자 시스템
-- **표준 Web Push API (VAPID)**: 영구 고정 VAPID 키를 기반으로 백그라운드 Service Worker 푸시 알림 수신.
-- **실시간 상단 티커 & In-App Toast**: 맥 OS 알림이 억제되어 있어도 웹 화면 상단 헤더에 즉시 푸시 팝업 표시.
+### 3. 🔔 PWA 웹 푸시 알림 & 관리자 시스템
+- **표준 Web Push API (VAPID)**: Firebase SDK 없이 브라우저의 Push API와 Service Worker로 구독 및 수신.
+- **운영체제 시스템 알림 전용**: 수신 메시지는 페이지 팝업으로 복제하지 않고 모바일·데스크톱 알림 센터에만 표시.
 - **서버 관리자 콘솔 (`/server-admin`)**: 멀티 테넌트 App Key 발급, 기기 구독자 관리, 전체 브로드캐스트 푸시 발송.
 - **관리자 롤(Admin Role) RBAC**: 권한이 부여된 사용자만 관리자 콘솔 접근 및 버튼 표시.
 
-### 4. 🔄 Supabase PostgreSQL ↔ SQLite 양방향 자동 동기화
-- **24시간 주기 자동 백그라운드 동기화**: Render 서버 재부팅 시에도 데이터가 100% 영구 보존되도록 클라우드 DB와 로컬 캐시를 지속적으로 동기화.
-- **관리자 즉시 동기화 (`/api/v1/admin/sync`)**: 관리자 화면에서 `[⚡ 지금 즉시 DB 동기화 실행]` 버튼으로 언제든 1초 만에 양방향 병합.
+### 4. ☁️ Supabase PostgreSQL 영구 저장
+- **서버리스 호환 데이터 계층**: 모든 서버 데이터는 Supabase PostgreSQL에 저장하며 로컬 파일이나 SQLite에 의존하지 않습니다.
+- **Vercel Function 호환**: 요청 단위로 실행되는 환경에서도 여러 인스턴스가 동일한 데이터를 안전하게 사용합니다.
 
 ---
 
@@ -37,21 +37,18 @@
 [ Frontend Client ] ──────────────────────────────────────────────┐
 │  • Google Workspace Style Hub UI (Dashboard & Sidebar)          │
 │  • Circular Schedule SVG Renderer (polar math: angle & radius)  │
-│  • Pushwing Client SDK (sw.js & Service Worker pushManager)     │
+│  • Web Push Client (sw.js & Service Worker pushManager)         │
 └─────────────────────────────────┬───────────────────────────────┘
                                   │ HTTP / REST / WebPush
-[ Node.js Express Server (server.js) ] ───────────────────────────┤
+[ Vercel Express Function (server.js) ] ─────────────────────────┤
 │  • Schedule Sharing & ID Generator API                          │
 │  • Push Dispatcher (web-push VAPID Gateway)                     │
 │  • Admin Auth & Role Validator (RBAC)                           │
-│  • Database Sync Service (src/db/syncService.js - 24h Cron)     │
 └─────────────────────────────────┬───────────────────────────────┘
                                   │
-          ┌───────────────────────┴───────────────────────┐
-          ▼                                               ▼
-[ Supabase PostgreSQL (Cloud) ]                [ Local SQLite / Cache ]
-• public.schedules                             • pushwing.db (Fallback)
-• public.apps                                  • In-Memory / JSON Store
+[ Supabase PostgreSQL (Cloud) ]
+• public.schedules
+• public.apps
 • public.subscriptions
 • public.push_logs
 • public.user_roles
@@ -83,7 +80,10 @@ PORT=3000
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-ADMIN_EMAILS=kimdongup@gmail.com
+ADMIN_EMAILS=admin@example.com
+VAPID_PUBLIC_KEY=your-vapid-public-key
+VAPID_PRIVATE_KEY=your-vapid-private-key
+VAPID_SUBJECT=mailto:admin@example.com
 ```
 
 ### 3. 서버 실행
@@ -92,7 +92,9 @@ npm start
 ```
 - 📅 **원형 시간표 대시보드**: `http://localhost:3000/`
 - 🔔 **푸시 서버 관리자 콘솔**: `http://localhost:3000/server-admin`
-- 📱 **Pushwing PWA 클라이언트**: `http://localhost:3000/client/index.html`
+- 📱 **PWA 설치 및 알림 구독**: `http://localhost:3000/`의 `푸시 알림 설정`
+
+Vercel에 처음부터 배포하는 방법과 검증 절차는 [`deploy.md`](deploy.md)를 참고하세요.
 
 ---
 

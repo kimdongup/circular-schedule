@@ -84,8 +84,8 @@ body {
   white-space: nowrap;
 }
 
-/* Floating Push Notification Window Card */
-.g-push-window-card {
+/* Floating app status card (not used for incoming Web Push) */
+.g-status-window-card {
   position: fixed;
   top: 72px;
   right: 24px;
@@ -109,7 +109,7 @@ body {
   to { transform: translateX(0); opacity: 1; }
 }
 
-.g-push-window-header {
+.g-status-window-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -117,20 +117,20 @@ body {
   padding-bottom: 8px;
 }
 
-.push-window-title {
+.status-window-title {
   font-size: 1.1rem;
   font-weight: 700;
   color: var(--g-text);
   margin-bottom: 4px;
 }
 
-.push-window-text {
+.status-window-text {
   font-size: 0.92rem;
   color: var(--g-text-muted);
   line-height: 1.4;
 }
 
-.push-window-close {
+.status-window-close {
   background: #f1f3f4;
   border: none;
   color: var(--g-text-muted);
@@ -144,7 +144,7 @@ body {
   justify-content: center;
   transition: background 0.15s;
 }
-.push-window-close:hover {
+.status-window-close:hover {
   background: #e8eaed;
   color: var(--g-text);
 }

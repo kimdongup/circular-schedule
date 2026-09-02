@@ -78,10 +78,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
         });
       } else {
-        // Local SQLite mode without Supabase - allow local admin
-        currentSession = { access_token: 'local-token', user: { email: 'local-admin' } };
-        showAuthGate(false, '로컬 관리자 모드');
-        loadAllDashboardData();
+        showAuthGate(true, null, 'Supabase 연결 정보가 없습니다. Vercel 환경 변수를 확인해 주세요.');
       }
     } catch (err) {
       console.error('Init Auth error:', err);
@@ -180,16 +177,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         statApps.textContent = data.stats.totalApps || 0;
         statSubs.textContent = data.stats.totalSubscriptions || 0;
         statSent.textContent = data.stats.totalSent || 0;
-        const uptimeMin = Math.floor((data.stats.uptimeSeconds || 0) / 60);
-        statUptime.textContent = `${uptimeMin}분 가동 중`;
+        statUptime.textContent = data.stats.vapidConfigured ? '🟢 VAPID 설정됨' : '🟡 VAPID 미설정';
 
         if (statDbType) {
           if (data.stats.isSupabaseReady) {
             statDbType.innerHTML = '<span style="color:var(--success);">🟢 Supabase DB</span>';
-          } else if (data.stats.dbType && data.stats.dbType.includes('Supabase')) {
-            statDbType.innerHTML = '<span style="color:var(--warning);" title="Supabase 테이블 생성 대기 중 (SQLite 폴백 가동)">🟡 Supabase (폴백)</span>';
           } else {
-            statDbType.innerHTML = '<span style="color:var(--primary);">📁 SQLite DB</span>';
+            statDbType.innerHTML = '<span style="color:var(--danger);">🔴 Supabase 연결 오류</span>';
           }
         }
       }
@@ -480,39 +474,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       alert('권한 부여 통신 오류: ' + err.message);
     }
   });
-
-  // 12. Database Synchronization Trigger
-  const btnTriggerSync = document.getElementById('btn-trigger-sync');
-  const syncStatusText = document.getElementById('sync-status-text');
-
-  if (btnTriggerSync) {
-    btnTriggerSync.addEventListener('click', async () => {
-      btnTriggerSync.disabled = true;
-      btnTriggerSync.textContent = '🔄 동기화 진행 중...';
-
-      try {
-        const res = await fetchWithAuth('/api/v1/admin/sync', { method: 'POST' });
-        const data = await res.json();
-        if (data.success && data.syncResult) {
-          const r = data.syncResult;
-          const timeStr = new Date(r.timestamp).toLocaleTimeString();
-          if (syncStatusText) {
-            syncStatusText.innerHTML = `✅ <strong>${timeStr}</strong> 동기화 완료 (앱: ${r.syncedApps}개, 구독: ${r.syncedSubscriptions}개, 롤: ${r.syncedRoles}개)`;
-            syncStatusText.style.color = 'var(--success)';
-          }
-          alert(`🎉 Supabase ↔ SQLite DB 동기화 완료!\n\n동기화된 App Key: ${r.syncedApps}개\n동기화된 구독: ${r.syncedSubscriptions}개\n동기화된 관리자 롤: ${r.syncedRoles}개\n소요시간: ${r.durationMs}ms`);
-          await loadAllDashboardData();
-        } else {
-          alert('동기화 실패: ' + (data.error || '알 수 없는 오류'));
-        }
-      } catch (err) {
-        alert('동기화 통신 오류: ' + err.message);
-      } finally {
-        btnTriggerSync.disabled = false;
-        btnTriggerSync.textContent = '⚡ 지금 즉시 DB 동기화 실행';
-      }
-    });
-  }
 
   // Start initialization
   await initAuth();

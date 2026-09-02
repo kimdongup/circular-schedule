@@ -3,7 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#4c6ef5" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="원형시간표" />
   <title>원형 시간표 관리 허브 | Circular Schedule Hub</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -21,19 +27,19 @@
     </div>
   </div>
 
-<!-- Floating Notification Window Popup -->
-<div id="floating-push-window" class="g-push-window-card" style="display:none;">
-  <div class="g-push-window-header">
+<!-- 화면 내 작업 완료 상태 메시지. Web Push 수신에는 사용하지 않습니다. -->
+<div id="floating-status-window" class="g-status-window-card" style="display:none;">
+  <div class="g-status-window-header">
     <div style="display:flex; align-items:center; gap:8px;">
       <span class="pulse-dot"></span>
-      <span style="font-weight:700; font-size:0.9rem; color:var(--g-blue);">🔔 실시간 푸시 알림</span>
+      <span style="font-weight:700; font-size:0.9rem; color:var(--g-blue);">작업 상태</span>
     </div>
-    <button type="button" id="btn-close-header-push" class="push-window-close" aria-label="닫기">✕</button>
+    <button type="button" id="btn-close-header-status" class="status-window-close" aria-label="닫기">✕</button>
   </div>
 
-  <div class="g-push-window-body">
-    <div id="header-push-title" class="push-window-title">시간표 알림</div>
-    <div id="header-push-text" class="push-window-text">잠시 후 일정 활동이 시작됩니다.</div>
+  <div class="g-status-window-body">
+    <div id="header-status-title" class="status-window-title">작업 완료</div>
+    <div id="header-status-text" class="status-window-text">요청한 작업을 완료했습니다.</div>
   </div>
 </div>
   
@@ -271,14 +277,15 @@
   </div>
 </div>
 
-<!-- 3. Pushwing Notification Modal -->
+<!-- 3. Web Push Notification Modal -->
 <div id="push-modal" class="modal-overlay" style="display:none;">
   <div class="modal-card" style="max-width: 480px;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-      <h3 style="margin:0;">🔔 Pushwing 웹 푸시 알림</h3>
+      <h3 style="margin:0;">🔔 기기 시스템 웹 푸시 알림</h3>
       <span class="badge" style="background:#e8f0fe; color:var(--g-blue); font-size:0.75rem; padding:3px 8px; border-radius:12px;">Web Push</span>
     </div>
-    <p class="modal-sub">등록된 시간표 시작 시간에 맞춰 푸시 알림을 실시간으로 수신합니다.</p>
+    <p class="modal-sub">알림은 페이지 안이 아니라 모바일·데스크톱 운영체제의 알림 센터에 표시됩니다.</p>
+    <p class="hint" style="margin-top:8px;">iPhone과 iPad에서는 먼저 이 사이트를 홈 화면에 추가한 뒤 설치된 앱에서 알림을 허용하세요.</p>
 
     <div style="margin-top:14px; padding:12px; background:#f8fafd; border-radius:8px; border:1px solid var(--g-border); font-size:0.85rem; display:flex; flex-direction:column; gap:6px;">
       <div style="display:flex; justify-content:space-between;">
@@ -298,7 +305,7 @@
     <div class="form-group full" style="margin-top:10px;">
       <label for="push-select-app">가입/구독할 서비스 (App Key)</label>
       <select id="push-select-app" class="form-control" style="width:100%; padding:8px 10px; border-radius:6px; border:1px solid #ced4da; font-size:0.9rem; background:#fff;">
-        <option value="demo-app-key-2026">Pushwing Demo App (demo-app-key-2026)</option>
+        <option value="demo-app-key-2026">Circular Schedule (demo-app-key-2026)</option>
       </select>
     </div>
 
@@ -310,7 +317,7 @@
     <div class="btn-row" style="margin-top:16px; flex-direction:column; gap:8px;">
       <button type="button" id="btn-toggle-push-sub" class="btn btn-primary" style="width:100%;">🔔 웹 푸시 알림 받기 (구독)</button>
       <button type="button" id="btn-send-test-push" class="btn btn-success" style="width:100%;">🚀 나에게 테스트 푸시 보내기</button>
-      <button type="button" id="btn-test-local-notify" class="btn btn-sm btn-outline" style="width:100%;">🧪 맥(Mac) 화면 알림 팝업 즉시 테스트</button>
+      <button type="button" id="btn-test-local-notify" class="btn btn-sm btn-outline" style="width:100%;">🧪 기기 시스템 알림 즉시 테스트</button>
     </div>
 
     <div style="margin-top:14px; padding-top:12px; border-top:1px solid #e9ecef; display:flex; justify-content:flex-end; align-items:center;">
@@ -319,7 +326,7 @@
   </div>
 </div>
 
-<script src="/pushwing-client.js"></script>
+<script src="/web-push-client.js"></script>
 <script src="/app.js" defer></script>
 </body>
 </html>

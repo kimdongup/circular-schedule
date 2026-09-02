@@ -1,0 +1,12 @@
+{
+  "port": 37888,
+  "host": "127.0.0.1",
+  "wsUrl": "ws://127.0.0.1:37888",
+  "pid": 59363,
+  "version": "0.1.0",
+  "vscodeVersion": "1.136.0",
+  "startedAt": "2026-09-02T17:19:26.681Z",
+  "workspaceRoots": [
+    "/Users/mac/Antigravity/circular-schedule"
+  ]
+}

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Circular Schedule">
+  <rect width="512" height="512" rx="112" fill="#4c6ef5"/>
+  <circle cx="256" cy="256" r="166" fill="#ffffff"/>
+  <circle cx="256" cy="256" r="124" fill="none" stroke="#dbe4ff" stroke-width="28"/>
+  <path d="M256 256V142M256 256l88 64" fill="none" stroke="#364fc7" stroke-width="28" stroke-linecap="round"/>
+  <circle cx="256" cy="256" r="18" fill="#364fc7"/>
+</svg>

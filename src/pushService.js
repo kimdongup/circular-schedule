@@ -1,6 +1,6 @@
 const webpush = require('web-push');
 const db = require('./db');
-require('./vapid'); // Ensures VAPID details are initialized
+const vapid = require('./vapid');
 
 /**
  * Dispatches web push notification to a list of subscriptions
@@ -9,16 +9,20 @@ require('./vapid'); // Ensures VAPID details are initialized
  * @returns {Promise<{successCount: number, failCount: number, prunedCount: number}>}
  */
 async function sendNotificationToSubscriptions(subscriptions, payload) {
+  if (!vapid.isConfigured) {
+    throw new Error('Web Push is not configured. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.');
+  }
+
   let successCount = 0;
   let failCount = 0;
   let prunedCount = 0;
   let lastError = null;
 
   const payloadString = JSON.stringify({
-    title: payload.title || 'Pushwing Notification',
+    title: payload.title || 'Circular Schedule Notification',
     body: payload.body || '',
-    icon: payload.icon || '/favicon.ico',
-    badge: payload.badge || '/favicon.ico',
+    icon: payload.icon || '/icons/notification-icon.png',
+    badge: payload.badge || '/icons/notification-badge.png',
     url: payload.url || '/',
     extraData: payload.extraData || {}
   });
