@@ -739,15 +739,17 @@ function syncCurrentScheduleToHub({ persistRemote = true } = {}) {
 }
 
 // ==========================================
-// 화면 내 작업 완료 상태 메시지 (Web Push 수신에는 사용하지 않음)
+// 화면 내 작업 결과 및 Web Push 수신 메시지
 // ==========================================
 let statusMessageTimeout = null;
-function showStatusMessage(titleMessage, bodyText = "") {
+function showStatusMessage(titleMessage, bodyText = "", label = "작업 상태") {
   const windowCard = $("floating-status-window");
+  const labelEl = $("header-status-label");
   const titleEl = $("header-status-title");
   const textEl = $("header-status-text");
   if (!windowCard) return;
 
+  if (labelEl) labelEl.textContent = label;
   if (titleEl) titleEl.textContent = titleMessage;
   if (textEl) textEl.textContent = bodyText || "원형 시간표 실시간 알림 시스템";
 
@@ -1174,7 +1176,6 @@ function setupEvents() {
         items[idx] = normalizeItem({ id: editingId, title, start, end, days, color });
       }
       editingId = null;
-      $("btn-submit-activity").textContent = "➕ 시간표에 등록";
       $("btn-cancel-edit").style.display = "none";
     } else {
       items.push(normalizeItem({ id: `item-${Date.now()}`, title, start, end, days, color }));
@@ -1189,7 +1190,6 @@ function setupEvents() {
   $("btn-cancel-edit").addEventListener("click", () => {
     editingId = null;
     $("input-title").value = "";
-    $("btn-submit-activity").textContent = "➕ 시간표에 등록";
     $("btn-cancel-edit").style.display = "none";
   });
 
@@ -1202,7 +1202,6 @@ function setupEvents() {
     setTimeDropdownsFromDec(item.start, item.end);
     setSelectedDays(item.days);
     setActiveColor(item.color);
-    $("btn-submit-activity").textContent = "💾 수정 완료";
     $("btn-cancel-edit").style.display = "inline-block";
   });
 
@@ -1439,6 +1438,20 @@ function setupEvents() {
     });
     webPushClient.registerServiceWorker().catch((error) => {
       console.info("[Web Push] Service Worker registration skipped:", error.message);
+    });
+  }
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      const message = event.data || {};
+      if (message.type !== "WEB_PUSH_RECEIVED" || !message.notification) return;
+
+      const notification = message.notification;
+      showStatusMessage(
+        notification.title || "시간표 알림",
+        notification.body || "새로운 알림이 도착했습니다.",
+        "푸시 알림"
+      );
     });
   }
 

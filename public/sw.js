@@ -1,7 +1,7 @@
 /**
  * Circular Schedule PWA Service Worker.
- * Push messages are displayed only through the operating system's
- * notification UI. They are not mirrored into an open browser tab.
+ * Push messages are displayed through the operating system notification UI
+ * and mirrored into any currently open app window.
  */
 
 self.addEventListener('install', () => {
@@ -38,25 +38,38 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  event.waitUntil(
-    self.registration.showNotification(notification.title, {
-      body: notification.body,
-      icon: notification.icon,
-      badge: notification.badge,
-      vibrate: [200, 100, 200],
-      tag: notification.tag,
-      renotify: true,
-      requireInteraction: true,
-      data: {
+  const showSystemNotification = self.registration.showNotification(notification.title, {
+    body: notification.body,
+    icon: notification.icon,
+    badge: notification.badge,
+    vibrate: [200, 100, 200],
+    tag: notification.tag,
+    renotify: true,
+    requireInteraction: true,
+    data: {
+      url: notification.url,
+      extraData: notification.extraData
+    },
+    actions: [
+      { action: 'open', title: '열기' },
+      { action: 'close', title: '닫기' }
+    ]
+  });
+
+  const notifyOpenWindows = self.clients
+    .matchAll({ type: 'window', includeUncontrolled: true })
+    .then((windowClients) => Promise.all(windowClients.map((client) => client.postMessage({
+      type: 'WEB_PUSH_RECEIVED',
+      notification: {
+        title: notification.title,
+        body: notification.body,
         url: notification.url,
+        tag: notification.tag,
         extraData: notification.extraData
-      },
-      actions: [
-        { action: 'open', title: '열기' },
-        { action: 'close', title: '닫기' }
-      ]
-    })
-  );
+      }
+    }))));
+
+  event.waitUntil(Promise.all([showSystemNotification, notifyOpenWindows]));
 });
 
 self.addEventListener('notificationclick', (event) => {

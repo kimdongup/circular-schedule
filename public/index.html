@@ -27,12 +27,12 @@
     </div>
   </div>
 
-<!-- 화면 내 작업 완료 상태 메시지. Web Push 수신에는 사용하지 않습니다. -->
+<!-- 작업 결과와 수신한 Web Push를 화면 안에도 표시합니다. -->
 <div id="floating-status-window" class="g-status-window-card" style="display:none;">
   <div class="g-status-window-header">
     <div style="display:flex; align-items:center; gap:8px;">
       <span class="pulse-dot"></span>
-      <span style="font-weight:700; font-size:0.9rem; color:var(--g-blue);">작업 상태</span>
+      <span id="header-status-label" style="font-weight:700; font-size:0.9rem; color:var(--g-blue);">작업 상태</span>
     </div>
     <button type="button" id="btn-close-header-status" class="status-window-close" aria-label="닫기">✕</button>
   </div>
@@ -224,7 +224,7 @@
             </div>
 
             <div class="btn-row">
-              <button type="submit" id="btn-submit-activity" class="btn btn-primary">➕ 시간표에 등록</button>
+              <span class="hint">활동명을 입력한 뒤 Enter 키를 누르면 시간표에 등록됩니다.</span>
               <button type="button" id="btn-cancel-edit" class="btn btn-outline" style="display:none;">취소</button>
             </div>
           </form>
