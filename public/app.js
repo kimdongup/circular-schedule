@@ -984,6 +984,11 @@ function setupEvents() {
   $("nav-dashboard").addEventListener("click", showDashboardView);
   $("nav-editor").addEventListener("click", showEditorView);
   $("nav-push").addEventListener("click", async () => {
+    if (!currentUser) {
+      alert("푸시 알림 설정은 로그인한 사용자만 이용할 수 있습니다.");
+      window.openAuthModal();
+      return;
+    }
     $("push-modal").style.display = "flex";
     const subscribeButton = $("btn-toggle-push-sub");
     subscribeButton.disabled = true;
@@ -1287,7 +1292,12 @@ function setupEvents() {
   let webPushClient = null;
   if (typeof WebPushClient !== "undefined") {
     webPushClient = new WebPushClient({
-      serverUrl: window.location.origin
+      serverUrl: window.location.origin,
+      accessTokenProvider: async () => {
+        if (!supabase || !currentUser) return null;
+        const { data: { session } } = await supabase.auth.getSession();
+        return session ? session.access_token : null;
+      }
     });
     webPushClient.registerServiceWorker().catch((error) => {
       console.info("[Web Push] Service Worker registration skipped:", error.message);
@@ -1323,6 +1333,7 @@ function setupEvents() {
   }
 
   $("btn-toggle-push-sub").addEventListener("click", async () => {
+    if (!currentUser) return alert("푸시 알림 설정은 로그인한 사용자만 이용할 수 있습니다.");
     if (!webPushClient) return alert("Web Push 클라이언트를 로드할 수 없습니다.");
     const selectedKey = $("push-select-app") ? $("push-select-app").value : "";
     if (!selectedKey) return alert("구독할 앱을 먼저 선택해 주세요.");
@@ -1337,8 +1348,7 @@ function setupEvents() {
         await webPushClient.unsubscribe();
         alert("푸시 알림 구독이 해제되었습니다.");
       } else {
-        const userId = $("push-user-id").value.trim() || "user-my-schedule";
-        await webPushClient.subscribe(userId);
+        await webPushClient.subscribe();
         alert(`🔔 [${selectedKey}] 앱 키로 웹 푸시 알림 구독이 완료되었습니다!`);
       }
     } catch (err) {
@@ -1406,7 +1416,7 @@ async function initSupabase() {
       }
       supabase = window.supabase.createClient(supabaseUrl, supabasePublishableKey);
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) handleAuthChange(session.user);
+      await handleAuthChange(session ? session.user : null);
       supabase.auth.onAuthStateChange((_event, session) => {
         handleAuthChange(session ? session.user : null);
       });
@@ -1423,12 +1433,17 @@ async function handleAuthChange(user) {
   const logoutBtn = $("btn-logout");
   const cloudSaveBtn = $("btn-cloud-save");
   const avatar = $("user-avatar");
+  const pushNav = $("nav-push");
 
   if (user) {
     if (userDisplay) userDisplay.textContent = `${user.email} (로그인 완료)`;
     if (loginBtn) loginBtn.style.display = "none";
     if (logoutBtn) logoutBtn.style.display = "inline-block";
     if (cloudSaveBtn) cloudSaveBtn.style.display = "inline-block";
+    if (pushNav) {
+      pushNav.style.display = "flex";
+      pushNav.setAttribute("aria-hidden", "false");
+    }
     if (avatar) {
       avatar.textContent = user.email.charAt(0).toUpperCase();
       avatar.title = user.email;
@@ -1439,6 +1454,12 @@ async function handleAuthChange(user) {
     if (loginBtn) loginBtn.style.display = "inline-block";
     if (logoutBtn) logoutBtn.style.display = "none";
     if (cloudSaveBtn) cloudSaveBtn.style.display = "none";
+    if (pushNav) {
+      pushNav.style.display = "none";
+      pushNav.setAttribute("aria-hidden", "true");
+    }
+    const pushModal = $("push-modal");
+    if (pushModal) pushModal.style.display = "none";
     if (avatar) {
       avatar.textContent = "G";
       avatar.title = "게스트 모드";

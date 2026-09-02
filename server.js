@@ -40,12 +40,12 @@ app.get('/server-admin', (req, res) => {
 // ==========================================
 const { createClient } = require('@supabase/supabase-js');
 
-async function verifyAdminUser(req) {
+async function verifyAuthenticatedUser(req) {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : (req.query.token || req.headers['x-access-token']);
 
   if (!token) {
-    return { isAdmin: false, error: '로그인 토큰이 제공되지 않았습니다.' };
+    return { user: null, error: '로그인이 필요합니다.' };
   }
 
   if (isSupabaseAuthConfigured) {
@@ -55,17 +55,41 @@ async function verifyAdminUser(req) {
       });
       const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
       if (error || !user) {
-        return { isAdmin: false, error: '유효하지 않거나 만료된 로그인 세션입니다.' };
+        return { user: null, error: '유효하지 않거나 만료된 로그인 세션입니다.' };
       }
 
-      const isAdmin = await db.isAdmin(user.id, user.email);
-      return { isAdmin, user };
+      return { user, error: null };
     } catch (err) {
-      return { isAdmin: false, error: err.message };
+      return { user: null, error: err.message };
     }
   }
 
-  return { isAdmin: false, error: 'Supabase authentication is not configured.' };
+  return { user: null, error: 'Supabase authentication is not configured.' };
+}
+
+async function verifyAdminUser(req) {
+  const { user, error } = await verifyAuthenticatedUser(req);
+  if (!user) return { isAdmin: false, user: null, error };
+
+  try {
+    const isAdmin = await db.isAdmin(user.id, user.email);
+    return { isAdmin, user };
+  } catch (err) {
+    return { isAdmin: false, user, error: err.message };
+  }
+}
+
+async function requireUserAuth(req, res, next) {
+  const { user, error } = await verifyAuthenticatedUser(req);
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      error: error || '로그인이 필요합니다.'
+    });
+  }
+
+  req.authUser = user;
+  next();
 }
 
 async function requireAdminAuth(req, res, next) {
@@ -215,9 +239,9 @@ app.delete('/api/v1/apps/:app_key', requireAdminAuth, async (req, res) => {
 });
 
 // 6. 웹 푸시 구독(Subscription) 등록 / 갱신
-app.post('/api/v1/subscribe', async (req, res) => {
+app.post('/api/v1/subscribe', requireUserAuth, async (req, res) => {
   try {
-    const { app_key, user_id, subscription } = req.body;
+    const { app_key, subscription } = req.body;
     if (!app_key || !subscription || !subscription.endpoint || !subscription.keys) {
       return res.status(400).json({
         success: false,
@@ -231,7 +255,7 @@ app.post('/api/v1/subscribe', async (req, res) => {
     }
 
     const userAgent = req.headers['user-agent'] || '';
-    const userId = user_id || 'anonymous';
+    const userId = req.authUser.id;
 
     await db.upsertSubscription({
       app_key,
@@ -254,13 +278,13 @@ app.post('/api/v1/subscribe', async (req, res) => {
 });
 
 // 7. 구독 해제
-app.post('/api/v1/unsubscribe', async (req, res) => {
+app.post('/api/v1/unsubscribe', requireUserAuth, async (req, res) => {
   try {
     const { endpoint } = req.body;
     if (!endpoint) {
       return res.status(400).json({ success: false, error: 'endpoint is required' });
     }
-    const result = await db.deleteSubscriptionByEndpoint(endpoint);
+    const result = await db.deleteSubscriptionByEndpoint(endpoint, req.authUser.id);
     res.json({ success: true, deletedCount: result.deletedCount });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -268,7 +292,7 @@ app.post('/api/v1/unsubscribe', async (req, res) => {
 });
 
 // 7-1. 브라우저 구독이 서버 DB에도 등록되어 있는지 확인
-app.post('/api/v1/subscription-status', async (req, res) => {
+app.post('/api/v1/subscription-status', requireUserAuth, async (req, res) => {
   try {
     const { app_key, endpoint } = req.body;
     if (!app_key || !endpoint) {
@@ -278,7 +302,7 @@ app.post('/api/v1/subscription-status', async (req, res) => {
       });
     }
 
-    const registered = await db.hasSubscription(app_key, endpoint);
+    const registered = await db.hasSubscription(app_key, endpoint, req.authUser.id);
     res.json({ success: true, registered });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

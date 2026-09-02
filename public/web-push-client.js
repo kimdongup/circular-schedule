@@ -31,6 +31,7 @@
       this.appKey = options.appKey || '';
       this.swPath = options.swPath || '/sw.js';
       this.scope = options.scope || '/';
+      this.accessTokenProvider = options.accessTokenProvider || null;
       this.vapidPublicKey = null;
       this.swRegistration = null;
     }
@@ -77,7 +78,23 @@
       return permission;
     }
 
-    async subscribe(userId = `user-${Math.random().toString(36).substring(2, 8)}`) {
+    async getAuthHeaders() {
+      if (!this.accessTokenProvider) {
+        throw new Error('푸시 알림을 설정하려면 로그인해 주세요.');
+      }
+
+      const accessToken = await this.accessTokenProvider();
+      if (!accessToken) {
+        throw new Error('로그인 세션이 만료되었습니다. 다시 로그인해 주세요.');
+      }
+
+      return {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`
+      };
+    }
+
+    async subscribe() {
       if (!this.isSupported()) {
         throw new Error('이 브라우저는 Web Push를 지원하지 않습니다.');
       }
@@ -105,10 +122,9 @@
 
       const response = await fetch(`${this.serverUrl}/api/v1/subscribe`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await this.getAuthHeaders(),
         body: JSON.stringify({
           app_key: this.appKey,
-          user_id: userId,
           subscription: subscription.toJSON()
         })
       });
@@ -123,7 +139,6 @@
 
       return {
         subscription: subscription.toJSON(),
-        userId,
         appKey: this.appKey
       };
     }
@@ -136,17 +151,19 @@
       const subscription = await registration.pushManager.getSubscription();
       if (!subscription) return false;
 
+      const authHeaders = await this.getAuthHeaders();
       const endpoint = subscription.endpoint;
       const removed = await subscription.unsubscribe();
       if (!removed) return false;
 
       const response = await fetch(`${this.serverUrl}/api/v1/unsubscribe`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({ endpoint })
       });
       if (!response.ok) {
-        throw new Error('브라우저 구독은 해제했지만 서버 정리에 실패했습니다.');
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || '브라우저 구독은 해제했지만 서버 정리에 실패했습니다.');
       }
       return true;
     }
@@ -164,7 +181,7 @@
         try {
           const response = await fetch(`${this.serverUrl}/api/v1/subscription-status`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: await this.getAuthHeaders(),
             body: JSON.stringify({
               app_key: this.appKey,
               endpoint: subscription.endpoint

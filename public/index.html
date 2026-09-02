@@ -65,7 +65,7 @@
       <span>🎨</span>
       <span>원형 시간표 편집기</span>
     </button>
-    <button type="button" class="g-sidebar-item" id="nav-push">
+    <button type="button" class="g-sidebar-item" id="nav-push" style="display:none;" aria-hidden="true">
       <span>🔔</span>
       <span>푸시 알림 설정</span>
     </button>
@@ -307,11 +307,6 @@
       <select id="push-select-app" class="form-control" style="width:100%; padding:8px 10px; border-radius:6px; border:1px solid #ced4da; font-size:0.9rem; background:#fff;">
         <option value="" selected disabled>앱 목록 불러오는 중...</option>
       </select>
-    </div>
-
-    <div class="form-group full" style="margin-top:10px;">
-      <label for="push-user-id">내 식별 ID (기기/사용자 이름)</label>
-      <input type="text" id="push-user-id" value="user-my-schedule" />
     </div>
 
     <div class="btn-row" style="margin-top:16px; flex-direction:column; gap:8px;">

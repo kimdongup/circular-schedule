@@ -109,24 +109,30 @@ class SupabaseAdapter {
     return data || [];
   }
 
-  async hasSubscription(appKey, endpoint) {
-    const { data, error } = await this.requireClient()
+  async hasSubscription(appKey, endpoint, userId = null) {
+    let query = this.requireClient()
       .from('subscriptions')
       .select('id')
       .eq('app_key', appKey)
-      .eq('endpoint', endpoint)
-      .maybeSingle();
+      .eq('endpoint', endpoint);
+
+    if (userId) query = query.eq('user_id', userId);
+
+    const { data, error } = await query.maybeSingle();
 
     this.assertResult(error, 'Check subscription');
     return Boolean(data);
   }
 
-  async deleteSubscriptionByEndpoint(endpoint) {
-    const { data, error } = await this.requireClient()
+  async deleteSubscriptionByEndpoint(endpoint, userId = null) {
+    let query = this.requireClient()
       .from('subscriptions')
       .delete()
-      .eq('endpoint', endpoint)
-      .select('id');
+      .eq('endpoint', endpoint);
+
+    if (userId) query = query.eq('user_id', userId);
+
+    const { data, error } = await query.select('id');
 
     this.assertResult(error, 'Delete subscription');
     return { deletedCount: (data || []).length };
