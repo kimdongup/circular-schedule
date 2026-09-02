@@ -42,7 +42,7 @@ with check (auth.uid() = user_id or (is_public = true and user_id is null));
 
 create policy "Users can delete schedules" 
 on public.schedules for delete 
-using (auth.uid() = user_id or (is_public = true and user_id is null));
+using (is_public = false and auth.uid() = user_id);
 
 
 -- 2. 관리자 롤 (user_roles) 테이블

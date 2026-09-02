@@ -141,6 +141,22 @@ app.post('/api/v1/admin/grant-role', requireAdminAuth, async (req, res) => {
   }
 });
 
+// 공개 시간표는 관리자만 삭제할 수 있습니다.
+app.delete('/api/v1/admin/schedules/:id', requireAdminAuth, async (req, res) => {
+  try {
+    const result = await db.deletePublicSchedule(req.params.id);
+    if (!result.deletedCount) {
+      return res.status(404).json({
+        success: false,
+        error: '삭제할 공개 시간표를 찾을 수 없습니다.'
+      });
+    }
+    res.json({ success: true, deletedCount: result.deletedCount });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ==========================================
 // 🔔 표준 Web Push (PWA) REST API v1
 // ==========================================

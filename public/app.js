@@ -86,6 +86,7 @@ const DEFAULT_PRESET_SCHEDULES = [
 
 let supabase = null;
 let currentUser = null;
+let currentUserIsAdmin = false;
 let currentScheduleId = "preset-1";
 let allSchedules = [];
 let items = [];
@@ -473,6 +474,10 @@ function renderDashboard() {
     card.dataset.id = schedule.id;
 
     const isPrivate = schedule.user_id && !schedule.is_public;
+    const isPublic = !isPrivate;
+    const canDuplicateOrDelete = isPublic
+      ? currentUserIsAdmin
+      : Boolean(currentUser && schedule.user_id === currentUser.id);
     const visibilityBadge = isPrivate
       ? `<span style="background:#f3e8ff; color:#7e22ce; font-size:0.72rem; font-weight:700; padding:2px 8px; border-radius:10px; border:1px solid #e9d5ff;">🔒 나만 보기 (Private)</span>`
       : `<span style="background:#ecfdf5; color:#047857; font-size:0.72rem; font-weight:700; padding:2px 8px; border-radius:10px; border:1px solid #a7f3d0;">🌐 공개 (Public)</span>`;
@@ -512,18 +517,27 @@ function renderDashboard() {
         </button>
 
         <div id="dropdown-${schedule.id}" class="card-dropdown-menu" style="display:none;">
-          <button type="button" class="card-dropdown-item" onclick="duplicateSchedule('${schedule.id}')">
-            <span>📋</span>
-            <span>복제하기</span>
-          </button>
+          ${canDuplicateOrDelete ? `
+            <button type="button" class="card-dropdown-item" onclick="duplicateSchedule('${schedule.id}')">
+              <span>📋</span>
+              <span>복제하기</span>
+            </button>
+          ` : ''}
           <button type="button" class="card-dropdown-item" onclick="renameSchedule('${schedule.id}')">
             <span>✏️</span>
             <span>이름 변경</span>
           </button>
-          <button type="button" class="card-dropdown-item danger" onclick="deleteSchedule('${schedule.id}')">
-            <span>🗑️</span>
-            <span>삭제하기</span>
-          </button>
+          ${canDuplicateOrDelete ? `
+            <button type="button" class="card-dropdown-item danger" onclick="deleteSchedule('${schedule.id}')">
+              <span>🗑️</span>
+              <span>삭제하기</span>
+            </button>
+          ` : `
+            <div class="card-dropdown-item" aria-disabled="true" style="cursor:not-allowed; color:var(--g-text-muted);">
+              <span>🔒</span>
+              <span>복제·삭제는 관리자만 가능</span>
+            </div>
+          `}
         </div>
       </div>
     `;
@@ -574,10 +588,17 @@ document.addEventListener("click", () => {
 
 window.duplicateSchedule = function(id) {
   closeAllDropdowns();
-  const schedule = getScheduleById(id);
+  const schedule = allSchedules.find(s => s.id === id);
   if (!schedule) return;
 
-  const isPrivate = currentUser ? false : true;
+  const isPublic = schedule.is_public === true || !schedule.user_id;
+  if (isPublic && !currentUserIsAdmin) {
+    return alert("공개 시간표는 관리자만 복제할 수 있습니다.");
+  }
+  if (!isPublic && (!currentUser || schedule.user_id !== currentUser.id)) {
+    return alert("본인의 비공개 시간표만 복제할 수 있습니다.");
+  }
+
   const newSchedule = {
     ...JSON.parse(JSON.stringify(schedule)),
     id: "sched-" + Date.now(),
@@ -594,21 +615,51 @@ window.duplicateSchedule = function(id) {
   showStatusMessage(`📋 '${newSchedule.title}' 시간표가 복제되었습니다.`);
 };
 
-window.deleteSchedule = function(id) {
+window.deleteSchedule = async function(id) {
   closeAllDropdowns();
   if (allSchedules.length <= 1) {
     return alert("최소 1개의 시간표는 유지되어야 합니다.");
   }
-  const schedule = getScheduleById(id);
+  const schedule = allSchedules.find(s => s.id === id);
+  if (!schedule) return;
+
+  const isPublic = schedule.is_public === true || !schedule.user_id;
+  if (isPublic && !currentUserIsAdmin) {
+    return alert("공개 시간표는 관리자만 삭제할 수 있습니다.");
+  }
+  if (!isPublic && (!currentUser || schedule.user_id !== currentUser.id)) {
+    return alert("본인의 비공개 시간표만 삭제할 수 있습니다.");
+  }
+
   if (!confirm(`'${schedule.title}' 시간표를 삭제하시겠습니까?`)) return;
+
+  try {
+    if (isPublic) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("관리자 로그인이 필요합니다.");
+
+      const response = await fetch(`/api/v1/admin/schedules/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      const result = await response.json().catch(() => ({}));
+
+      // 로컬 기본 예제는 DB 행이 없으므로 관리자에게 로컬 삭제를 허용합니다.
+      const isLocalPreset = id.startsWith("preset-");
+      if (!response.ok && !(response.status === 404 && isLocalPreset)) {
+        throw new Error(result.error || "공개 시간표 삭제에 실패했습니다.");
+      }
+    } else {
+      if (!supabase) throw new Error("Supabase에 연결할 수 없습니다.");
+      const { error } = await supabase.from("schedules").delete().eq("id", id);
+      if (error) throw error;
+    }
+  } catch (error) {
+    return alert("시간표 삭제 실패: " + error.message);
+  }
 
   allSchedules = allSchedules.filter(s => s.id !== id);
   saveHubSchedules();
-
-  if (supabase) {
-    supabase.from("schedules").delete().eq("id", id).then(() => {});
-  }
-
   renderDashboard();
   showStatusMessage(`🗑️ '${schedule.title}' 시간표가 삭제되었습니다.`);
 };
@@ -1428,6 +1479,7 @@ async function initSupabase() {
 
 async function handleAuthChange(user) {
   currentUser = user;
+  currentUserIsAdmin = false;
   const userDisplay = $("user-display");
   const loginBtn = $("btn-login-modal");
   const logoutBtn = $("btn-logout");
@@ -1489,6 +1541,7 @@ async function checkAdminRole(userId, email) {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
+      currentUserIsAdmin = false;
       if (adminBtn) adminBtn.style.display = "none";
       return;
     }
@@ -1497,8 +1550,10 @@ async function checkAdminRole(userId, email) {
       headers: { Authorization: `Bearer ${session.access_token}` }
     });
     const data = await response.json();
-    if (adminBtn) adminBtn.style.display = data.success && data.isAdmin ? "inline-flex" : "none";
+    currentUserIsAdmin = Boolean(data.success && data.isAdmin);
+    if (adminBtn) adminBtn.style.display = currentUserIsAdmin ? "inline-flex" : "none";
   } catch (e) {
+    currentUserIsAdmin = false;
     if (adminBtn) adminBtn.style.display = "none";
   }
 }

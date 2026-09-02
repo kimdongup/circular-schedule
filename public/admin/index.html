@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" class="admin-pending">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +7,7 @@
   <title>Web Push 관리 콘솔 | 원형 시간표</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <style>
+    html.admin-pending body { visibility: hidden; }
     :root {
       --bg: #090d16;
       --card-bg: #131c2e;
@@ -67,28 +68,6 @@
       <a href="/" target="_blank" class="btn btn-outline btn-sm">📱 사용자 PWA</a>
     </div>
   </header>
-
-  <!-- Admin Auth Gate (Shown when not logged in as Admin) -->
-  <div id="admin-auth-gate" class="card" style="display: none; max-width: 480px; margin: 40px auto; text-align: center;">
-    <h2 style="justify-content: center; border: none; font-size: 1.3rem;">🔒 관리자 인증 필요</h2>
-    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 18px;">
-      이 화면은 <strong>관리자 롤(Admin Role)</strong>을 보유한 사용자만 접근할 수 있습니다.
-    </p>
-    <div class="form-group" style="text-align: left;">
-      <label for="admin-auth-email">관리자 이메일</label>
-      <input type="email" id="admin-auth-email" placeholder="admin@example.com">
-    </div>
-    <div class="form-group" style="text-align: left;">
-      <label for="admin-auth-pass">비밀번호</label>
-      <input type="password" id="admin-auth-pass" placeholder="비밀번호 입력">
-    </div>
-    <button type="button" id="btn-do-admin-login" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
-      🔑 관리자로 로그인
-    </button>
-    <div style="margin-top: 14px;">
-      <a href="/" style="color: var(--primary); text-decoration: none; font-size: 0.85rem;">← 시간표 홈으로 돌아가기</a>
-    </div>
-  </div>
 
   <!-- Admin Dashboard Container (Shown only to verified Admins) -->
   <div id="admin-dashboard" style="display: none;">
@@ -265,5 +244,6 @@
   </div>
 
   <script src="/admin/admin.js"></script>
+  <noscript><meta http-equiv="refresh" content="0;url=/?admin=required"></noscript>
 </body>
 </html>

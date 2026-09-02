@@ -149,6 +149,18 @@ class SupabaseAdapter {
     return { deletedCount: (data || []).length };
   }
 
+  async deletePublicSchedule(id) {
+    const { data, error } = await this.requireClient()
+      .from('schedules')
+      .delete()
+      .eq('id', id)
+      .eq('is_public', true)
+      .select('id');
+
+    this.assertResult(error, 'Delete public schedule');
+    return { deletedCount: (data || []).length };
+  }
+
   async getStats() {
     const client = this.requireClient();
     const [appsRes, subscriptionsRes, logsRes, rolesRes] = await Promise.all([

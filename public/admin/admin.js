@@ -3,13 +3,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   let currentSession = null;
 
   // UI Elements - Auth Gate
-  const adminAuthGate = document.getElementById('admin-auth-gate');
   const adminDashboard = document.getElementById('admin-dashboard');
   const adminUserInfo = document.getElementById('admin-user-info');
   const btnAdminLogout = document.getElementById('btn-admin-logout');
-  const adminAuthEmail = document.getElementById('admin-auth-email');
-  const adminAuthPass = document.getElementById('admin-auth-pass');
-  const btnDoAdminLogin = document.getElementById('btn-do-admin-login');
 
   // UI Elements - Dashboard
   const statApps = document.getElementById('stat-apps');
@@ -66,7 +62,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (session) {
           await verifyAndSetSession(session);
         } else {
-          showAuthGate(true);
+          denyAdminAccess();
         }
 
         supabase.auth.onAuthStateChange(async (event, session) => {
@@ -74,15 +70,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             await verifyAndSetSession(session);
           } else {
             currentSession = null;
-            showAuthGate(true);
+            denyAdminAccess();
           }
         });
       } else {
-        showAuthGate(true, null, 'Supabase 연결 정보가 없습니다. Vercel 환경 변수를 확인해 주세요.');
+        denyAdminAccess();
       }
     } catch (err) {
       console.error('Init Auth error:', err);
-      showAuthGate(true);
+      denyAdminAccess();
     }
   }
 
@@ -92,61 +88,27 @@ document.addEventListener('DOMContentLoaded', async () => {
       const res = await fetchWithAuth('/api/v1/auth/check-admin');
       const data = await res.json();
       if (data.success && data.isAdmin) {
-        showAuthGate(false, session.user.email);
+        showAdminDashboard(session.user.email);
         await loadAllDashboardData();
       } else {
-        showAuthGate(true, null, '⚠️ 이 계정은 관리자 권한(Admin Role)이 없습니다. 관리자 계정으로 로그인해 주세요.');
+        denyAdminAccess();
       }
     } catch (err) {
-      showAuthGate(true, null, '인증 확인 중 오류가 발생했습니다: ' + err.message);
+      console.error('Admin verification error:', err);
+      denyAdminAccess();
     }
   }
 
-  function showAuthGate(show, email = null, alertMsg = null) {
-    if (show) {
-      adminAuthGate.style.display = 'block';
-      adminDashboard.style.display = 'none';
-      btnAdminLogout.style.display = 'none';
-      adminUserInfo.textContent = '🔒 로그인 필요';
-      if (alertMsg) alert(alertMsg);
-    } else {
-      adminAuthGate.style.display = 'none';
-      adminDashboard.style.display = 'block';
-      btnAdminLogout.style.display = 'inline-block';
-      adminUserInfo.textContent = `👤 관리자: ${email || 'Admin'}`;
-    }
+  function showAdminDashboard(email) {
+    document.documentElement.classList.remove('admin-pending');
+    adminDashboard.style.display = 'block';
+    btnAdminLogout.style.display = 'inline-block';
+    adminUserInfo.textContent = `👤 관리자: ${email || 'Admin'}`;
   }
 
-  // 3. Login Button Event
-  btnDoAdminLogin.addEventListener('click', async () => {
-    const email = adminAuthEmail.value.trim();
-    const password = adminAuthPass.value.trim();
-    if (!email || !password) {
-      alert('이메일과 비밀번호를 모두 입력해 주세요.');
-      return;
-    }
-
-    btnDoAdminLogin.disabled = true;
-    btnDoAdminLogin.textContent = '로그인 중...';
-
-    try {
-      if (supabase) {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) {
-          alert('로그인 실패: ' + error.message);
-        } else {
-          await verifyAndSetSession(data.session);
-        }
-      } else {
-        alert('Supabase 연결 정보가 없습니다.');
-      }
-    } catch (err) {
-      alert('로그인 처리 중 오류: ' + err.message);
-    } finally {
-      btnDoAdminLogin.disabled = false;
-      btnDoAdminLogin.textContent = '🔑 관리자로 로그인';
-    }
-  });
+  function denyAdminAccess() {
+    window.location.replace('/?admin=required');
+  }
 
   // Logout Button Event
   btnAdminLogout.addEventListener('click', async () => {
@@ -154,7 +116,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       await supabase.auth.signOut();
     }
     currentSession = null;
-    showAuthGate(true);
+    window.location.replace('/');
   });
 
   // 4. Load All Dashboard Data
