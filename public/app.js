@@ -1176,6 +1176,7 @@ function setupEvents() {
         items[idx] = normalizeItem({ id: editingId, title, start, end, days, color });
       }
       editingId = null;
+      $("btn-submit-activity").textContent = "➕ 활동 등록하기";
       $("btn-cancel-edit").style.display = "none";
     } else {
       items.push(normalizeItem({ id: `item-${Date.now()}`, title, start, end, days, color }));
@@ -1190,6 +1191,7 @@ function setupEvents() {
   $("btn-cancel-edit").addEventListener("click", () => {
     editingId = null;
     $("input-title").value = "";
+    $("btn-submit-activity").textContent = "➕ 활동 등록하기";
     $("btn-cancel-edit").style.display = "none";
   });
 
@@ -1202,6 +1204,7 @@ function setupEvents() {
     setTimeDropdownsFromDec(item.start, item.end);
     setSelectedDays(item.days);
     setActiveColor(item.color);
+    $("btn-submit-activity").textContent = "💾 활동 수정 완료";
     $("btn-cancel-edit").style.display = "inline-block";
   });
 

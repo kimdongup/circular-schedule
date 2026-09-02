@@ -625,6 +625,29 @@ svg { width: 100%; max-width: 560px; height: auto; }
   color: var(--g-text);
 }
 
+.section-title-button {
+  width: 100%;
+  padding: 12px 18px;
+  border: 1px solid var(--g-blue);
+  border-radius: 10px;
+  background: var(--g-blue);
+  color: #fff;
+  font-family: inherit;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(26, 115, 232, 0.22);
+  transition: background 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+.section-title-button:hover {
+  background: var(--g-blue-hover);
+  box-shadow: 0 3px 8px rgba(26, 115, 232, 0.3);
+  transform: translateY(-1px);
+}
+.section-title-button:focus-visible {
+  outline: 3px solid rgba(26, 115, 232, 0.3);
+  outline-offset: 2px;
+}
+
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
 .form-group { display: flex; flex-direction: column; gap: 4px; }
 .form-group.full { grid-column: span 2; }
